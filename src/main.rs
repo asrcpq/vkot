@@ -84,11 +84,10 @@ fn main() {
 								let bytes = buf[..nb].to_vec();
 								send.send(bytes).unwrap();
 								proxy.send_event(UserEvent::Flush);
-								// TODO: notify update
 							}
 							Err(e) => {
-								// TODO: quit
 								eprintln!("{:?}", e);
+								proxy.send_event(UserEvent::Quit);
 								break;
 							}
 						}
@@ -106,14 +105,25 @@ fn main() {
 								rdr.damage();
 							}
 							WindowEvent::ReceivedCharacter(ch) => {
-								let ch = ch as u8;
-								nix::unistd::write(pty.master, &[ch]).unwrap();
+								let mut buf = [0_u8; 4];
+								let utf8 = ch.encode_utf8(&mut buf).as_bytes();
+								nix::unistd::write(pty.master, utf8).unwrap();
 							}
 							_ => {}
 						}
 					}
 					Event::RedrawRequested(_window_id) => {
 						rdr.render2();
+					}
+					Event::UserEvent(event) => {
+						match event {
+							UserEvent::Quit => {
+								*ctrl = ControlFlow::Exit;
+							}
+							UserEvent::Flush => {
+								rdr.redraw();
+							}
+						}
 					}
 					Event::MainEventsCleared => {
 						let data = console.render_data();
