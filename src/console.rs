@@ -4,14 +4,16 @@ pub struct Console {
 	csi_buf: Vec<u8>,
 	screen: Vec<ScreenBuffer>,
 	sid: usize,
+	color: u8,
 }
 
 impl Console {
-	pub fn new(size: (i32, i32)) -> Console {
+	pub fn new(size: [i32; 2]) -> Console {
 		Console {
 			csi_buf: Vec::new(),
 			screen: vec![ScreenBuffer::new(size), ScreenBuffer::new(size)],
 			sid: 0,
+			color: 231,
 		}
 	}
 
@@ -110,7 +112,26 @@ impl Console {
 				);
 			}
 			Some(b'm') => {
-				// we do nothing here as we don't plan to support SGR
+				let params = String::from_utf8(param)
+					.unwrap()
+					.split(';')
+					.map(|x| x.parse::<i32>().unwrap_or(0))
+					.collect::<Vec<i32>>();
+				for param in params.iter().cloned() {
+					if param == 0 {
+						self.color = 231;
+					} else if (30..=37).contains(&param) {
+						self.color = param as u8 - 30;
+					} else if (90..=97).contains(&param) {
+						self.color = param as u8 - 90 + 8;
+					} else if (40..=47).contains(&param) {
+						// skip
+					} else if (100..=107).contains(&param) {
+						// skip
+					} else {
+						eprintln!("Unimplemented sgr sequence {:?}", params);
+					}
+				}
 			}
 			Some(b'n') => {
 				report = self.screen[self.sid].report_cursor(
@@ -154,36 +175,45 @@ impl Console {
 		report
 	}
 
-	pub fn put_char(&mut self, ch: u8) -> Option<Vec<u8>> {
-		eprintln!("put: {}", ch);
-		if ch == 27 {
+	pub fn put_char(&mut self, ch: char) -> Option<Vec<u8>> {
+		let byte = ch as u8;
+		if byte == 0 {
+			// TODO: investigate the reason why erase write zero
+			return None
+		}
+
+		if byte == 27 {
 			//self.proc_csi();
 			self.csi_buf = vec![27];
 			return None;
 		}
 
 		if !self.csi_buf.is_empty() {
-			if self.csi_buf.len() == 1 && ch == b'[' {
-				self.csi_buf.push(ch);
+			if self.csi_buf.len() == 1 && byte == b'[' {
+				self.csi_buf.push(byte);
 				return None;
 			}
-			if ch >= 0x40 && ch < 0x80 {
-				self.csi_buf.push(ch);
+			if byte >= 0x40 && byte < 0x80 {
+				self.csi_buf.push(byte);
 				return self.proc_csi();
 			}
-			self.csi_buf.push(ch);
+			self.csi_buf.push(byte);
 			return None;
 		}
 
-		if ch == 13 {
-			self.screen[self.sid].set_char(ch, false);
+		if byte == 13 { // FIXME: ???
+			self.screen[self.sid].set_char(ch, self.color, false);
 			return None;
 		}
-		self.screen[self.sid].set_char(ch, true);
+		self.screen[self.sid].set_char(ch, self.color, true);
 		None
 	}
 
-	pub fn render_data(&mut self) -> &[u8] {
-		self.screen[self.sid].get_render_data().0
+	pub fn get_size(&self) -> [i32; 2] {
+		self.screen[0].get_size()
+	}
+
+	pub fn render_data(&mut self) -> (&Vec<(char, u8)>, [i32; 2]) {
+		self.screen[self.sid].get_render_data()
 	}
 }

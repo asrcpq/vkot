@@ -1,4 +1,4 @@
-fix redraw
+add simple color
 
 todos:
 - resize

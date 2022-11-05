@@ -1,3 +1,4 @@
+mod color_table;
 mod console;
 mod screen_buffer;
 
@@ -58,10 +59,12 @@ fn main_loop(pty_master: OwnedFd) {
 	let img = fc.bitw_loader("../bitw/data/lat15_terminus32x16.txt");
 	rdr.upload_tex(img, 0);
 	let mut model = fc.generate_model();
-	let mut _tmhandle = None;
+	let mut _tmhandle = None; // text model
+	let mut _cmhandle = None; // cursor model
 
 	let tsize = fc.get_terminal_size_in_char();
-	let mut console = Console::new((tsize[0] as i32, tsize[1] as i32));
+	let ct = crate::color_table::ColorTable::default();
+	let mut console = Console::new([tsize[0] as i32, tsize[1] as i32]);
 	let pty_master2 = pty_master.try_clone().unwrap();
 
 	let (send, recv) = mpsc::sync_channel(1);
@@ -103,16 +106,27 @@ fn main_loop(pty_master: OwnedFd) {
 			}
 		}
 		Event::RedrawRequested(_window_id) => {
-			eprintln!("redraw");
-			let data = console.render_data();
-			let string = String::from_utf8_lossy(data);
-			model.faces = fc.text2fs(&string, 0);
-			_tmhandle = Some(rdr.insert_model(&model));
 			if let Ok(bytes) = recv.try_recv() {
-				for byte in bytes.into_iter() {
-					console.put_char(byte);
+				for ch in String::from_utf8_lossy(&bytes).chars() {
+					console.put_char(ch);
 				}
 			}
+			let [tx, ty] = console.get_size();
+			let [tx, _] = [tx as u32, ty as u32];
+			model.faces = Vec::new();
+			let (chars, cursor_pos) = console.render_data();
+			for (idx, (ch, color)) in chars.iter().enumerate() {
+				let idx = idx as u32;
+				let offset_x = idx % tx;
+				let offset_y = idx / tx;
+				model.faces.extend(fc.text2fs(
+					[offset_x, offset_y],
+					std::iter::once(*ch),
+					ct.rgb_from_256color(*color),
+					0,
+				));
+			}
+			_tmhandle = Some(rdr.insert_model(&model));
 			rdr.render2();
 		}
 		Event::UserEvent(event) => {
@@ -159,8 +173,8 @@ fn main() {
 			unistd::close(pty.slave).unwrap();
 
 			use std::ffi::CString;
-			let path = CString::new("/bin/dash").unwrap();
-			std::env::set_var("TERM", "dumb");
+			let path = CString::new("/bin/bash").unwrap();
+			std::env::set_var("TERM", "vt100");
 
 			unistd::execv::<CString>(&path, &[]).unwrap();
 		}
