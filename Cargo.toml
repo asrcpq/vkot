@@ -1,5 +1,5 @@
 [package]
-name = "fsdterm"
+name = "vkot"
 version = "0.1.0"
 authors = ["asrcpq <asrcpq@gmail.com>"]
 edition = "2018"

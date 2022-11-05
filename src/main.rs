@@ -8,7 +8,7 @@ use nix::unistd;
 use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::path::Path;
 use std::sync::mpsc;
-use winit::event::{Event, WindowEvent, ElementState};
+use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
 
 use console::Console;
@@ -41,14 +41,13 @@ fn openpty() -> Result<PTY, String> {
 	})
 }
 
+#[derive(Debug)]
 enum UserEvent {
 	Flush,
 	Quit,
 }
 
 fn main_loop(pty_master: OwnedFd) {
-	let mut shift: bool = false;
-	let mut ctrl: bool = false;
 	let el = EventLoopBuilder::<UserEvent>::with_user_event().build();
 	let proxy = el.create_proxy();
 
@@ -59,80 +58,79 @@ fn main_loop(pty_master: OwnedFd) {
 	let img = fc.bitw_loader("../bitw/data/lat15_terminus32x16.txt");
 	rdr.upload_tex(img, 0);
 	let mut model = fc.generate_model();
-	let mut tmhandle = None;
+	let mut _tmhandle = None;
 
-	let mut tsize = fc.get_terminal_size_in_char();
+	let tsize = fc.get_terminal_size_in_char();
 	let mut console = Console::new((tsize[0] as i32, tsize[1] as i32));
 	let pty_master2 = pty_master.try_clone().unwrap();
-	loop {
-		let (send, recv) = mpsc::sync_channel(1);
-		{
-			// spawn a thread which reads bytes from the slave
-			// and forwards them to the main thread
-			let mut buf = vec![0; 4 * 1024];
-			std::thread::spawn(move || loop {
-				match unistd::read(pty_master.as_raw_fd(), &mut buf) {
-					Ok(nb) => {
-						let bytes = buf[..nb].to_vec();
-						send.send(bytes).unwrap();
-						proxy.send_event(UserEvent::Flush);
-					}
-					Err(e) => {
-						eprintln!("{:?}", e);
-						proxy.send_event(UserEvent::Quit);
-						break;
-					}
-				}
-			});
-		}
 
-		el.run(move |event, _, ctrl| match event {
-			Event::WindowEvent { event: e, .. } => {
-				match e {
-					WindowEvent::CloseRequested => {
-						*ctrl = ControlFlow::Exit;
-					}
-					WindowEvent::Resized(_) => {
-						let ssize = rdr.get_size();
-						rdr.damage();
-					}
-					WindowEvent::ReceivedCharacter(ch) => {
-						let mut buf = [0_u8; 4];
-						let utf8 = ch.encode_utf8(&mut buf).as_bytes();
-						nix::unistd::write(pty_master2.as_raw_fd(), utf8).unwrap();
-					}
-					_ => {}
+	let (send, recv) = mpsc::sync_channel(1);
+	{
+		// spawn a thread which reads bytes from the slave
+		// and forwards them to the main thread
+		let mut buf = vec![0; 4 * 1024];
+		std::thread::spawn(move || loop {
+			match unistd::read(pty_master.as_raw_fd(), &mut buf) {
+				Ok(nb) => {
+					let bytes = buf[..nb].to_vec();
+					send.send(bytes).unwrap();
+					proxy.send_event(UserEvent::Flush).unwrap();
+				}
+				Err(e) => {
+					eprintln!("{:?}", e);
+					proxy.send_event(UserEvent::Quit).unwrap();
+					break;
 				}
 			}
-			Event::RedrawRequested(_window_id) => {
-				rdr.render2();
-			}
-			Event::UserEvent(event) => {
-				match event {
-					UserEvent::Quit => {
-						*ctrl = ControlFlow::Exit;
-					}
-					UserEvent::Flush => {
-						rdr.redraw();
-					}
-				}
-			}
-			Event::MainEventsCleared => {
-				let data = console.render_data();
-				let string = String::from_utf8_lossy(data);
-				model.faces = fc.text2fs(&string, 0);
-				tmhandle = Some(rdr.insert_model(&model));
-				if let Ok(bytes) = recv.try_recv() {
-					for byte in bytes.into_iter() {
-						console.put_char(byte);
-					}
-				}
-				rdr.redraw();
-				*ctrl = ControlFlow::Wait;
-			}
-			_ => {}
-		})
+		});
 	}
+
+	el.run(move |event, _, ctrl| match event {
+		Event::WindowEvent { event: e, .. } => {
+			match e {
+				WindowEvent::CloseRequested => {
+					*ctrl = ControlFlow::Exit;
+				}
+				WindowEvent::Resized(_) => {
+					rdr.damage();
+				}
+				WindowEvent::ReceivedCharacter(ch) => {
+					let mut buf = [0_u8; 4];
+					let utf8 = ch.encode_utf8(&mut buf).as_bytes();
+					nix::unistd::write(pty_master2.as_raw_fd(), utf8).unwrap();
+				}
+				_ => {}
+			}
+		}
+		Event::RedrawRequested(_window_id) => {
+			eprintln!("redraw");
+			let data = console.render_data();
+			let string = String::from_utf8_lossy(data);
+			model.faces = fc.text2fs(&string, 0);
+			_tmhandle = Some(rdr.insert_model(&model));
+			if let Ok(bytes) = recv.try_recv() {
+				for byte in bytes.into_iter() {
+					console.put_char(byte);
+				}
+			}
+			rdr.render2();
+		}
+		Event::UserEvent(event) => {
+			match event {
+				UserEvent::Quit => {
+					*ctrl = ControlFlow::Exit;
+				}
+				UserEvent::Flush => {
+					rdr.redraw();
+				}
+			}
+		}
+		Event::MainEventsCleared => {
+			rdr.redraw();
+			*ctrl = ControlFlow::Wait;
+		}
+		_ => {}
+	})
 }
 
 fn main() {
@@ -140,7 +138,7 @@ fn main() {
 
 	let result = unsafe {unistd::fork()};
 	match result {
-		Ok(unistd::ForkResult::Parent { child: shell_pid }) => {
+		Ok(unistd::ForkResult::Parent { .. }) => {
 			unistd::close(pty.slave).unwrap();
 			let pty_master = unsafe { OwnedFd::from_raw_fd(pty.master) };
 			main_loop(pty_master);

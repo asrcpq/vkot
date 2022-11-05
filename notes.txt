@@ -1,1 +1,4 @@
-split main loop
+fix redraw
+
+todos:
+- resize

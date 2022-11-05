@@ -1,9 +1,6 @@
 use crate::screen_buffer::ScreenBuffer;
 
 pub struct Console {
-	size: (i32, i32),
-	font_size: (i32, i32),
-	scaler: f32,
 	csi_buf: Vec<u8>,
 	screen: Vec<ScreenBuffer>,
 	sid: usize,
@@ -11,20 +8,11 @@ pub struct Console {
 
 impl Console {
 	pub fn new(size: (i32, i32)) -> Console {
-		let font_size = (15, 20);
 		Console {
-			size,
-			font_size,
-			scaler: 20.,
 			csi_buf: Vec::new(),
 			screen: vec![ScreenBuffer::new(size), ScreenBuffer::new(size)],
 			sid: 0,
 		}
-	}
-
-	// for set env
-	pub fn get_size(&self) -> (i32, i32) {
-		self.size
 	}
 
 	fn proc_csi(&mut self) -> Option<Vec<u8>> {
