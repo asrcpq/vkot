@@ -46,6 +46,95 @@ enum UserEvent {
 	Quit,
 }
 
+fn main_loop(pty_master: OwnedFd) {
+	let mut shift: bool = false;
+	let mut ctrl: bool = false;
+	let el = EventLoopBuilder::<UserEvent>::with_user_event().build();
+	let proxy = el.create_proxy();
+
+	let mut rdr = Renderer::new(&el);
+	let ssize = rdr.get_size();
+	let mut fc = FontConfig::default();
+	fc.resize_screen(ssize);
+	let img = fc.bitw_loader("../bitw/data/lat15_terminus32x16.txt");
+	rdr.upload_tex(img, 0);
+	let mut model = fc.generate_model();
+	let mut tmhandle = None;
+
+	let mut tsize = fc.get_terminal_size_in_char();
+	let mut console = Console::new((tsize[0] as i32, tsize[1] as i32));
+	let pty_master2 = pty_master.try_clone().unwrap();
+	loop {
+		let (send, recv) = mpsc::sync_channel(1);
+		{
+			// spawn a thread which reads bytes from the slave
+			// and forwards them to the main thread
+			let mut buf = vec![0; 4 * 1024];
+			std::thread::spawn(move || loop {
+				match unistd::read(pty_master.as_raw_fd(), &mut buf) {
+					Ok(nb) => {
+						let bytes = buf[..nb].to_vec();
+						send.send(bytes).unwrap();
+						proxy.send_event(UserEvent::Flush);
+					}
+					Err(e) => {
+						eprintln!("{:?}", e);
+						proxy.send_event(UserEvent::Quit);
+						break;
+					}
+				}
+			});
+		}
+
+		el.run(move |event, _, ctrl| match event {
+			Event::WindowEvent { event: e, .. } => {
+				match e {
+					WindowEvent::CloseRequested => {
+						*ctrl = ControlFlow::Exit;
+					}
+					WindowEvent::Resized(_) => {
+						let ssize = rdr.get_size();
+						rdr.damage();
+					}
+					WindowEvent::ReceivedCharacter(ch) => {
+						let mut buf = [0_u8; 4];
+						let utf8 = ch.encode_utf8(&mut buf).as_bytes();
+						nix::unistd::write(pty_master2.as_raw_fd(), utf8).unwrap();
+					}
+					_ => {}
+				}
+			}
+			Event::RedrawRequested(_window_id) => {
+				rdr.render2();
+			}
+			Event::UserEvent(event) => {
+				match event {
+					UserEvent::Quit => {
+						*ctrl = ControlFlow::Exit;
+					}
+					UserEvent::Flush => {
+						rdr.redraw();
+					}
+				}
+			}
+			Event::MainEventsCleared => {
+				let data = console.render_data();
+				let string = String::from_utf8_lossy(data);
+				model.faces = fc.text2fs(&string, 0);
+				tmhandle = Some(rdr.insert_model(&model));
+				if let Ok(bytes) = recv.try_recv() {
+					for byte in bytes.into_iter() {
+						console.put_char(byte);
+					}
+				}
+				rdr.redraw();
+				*ctrl = ControlFlow::Wait;
+			}
+			_ => {}
+		})
+	}
+}
+
 fn main() {
 	let pty = openpty().unwrap();
 
@@ -53,94 +142,8 @@ fn main() {
 	match result {
 		Ok(unistd::ForkResult::Parent { child: shell_pid }) => {
 			unistd::close(pty.slave).unwrap();
-
-			let mut shift: bool = false;
-			let mut ctrl: bool = false;
-			let el = EventLoopBuilder::<UserEvent>::with_user_event().build();
-			let proxy = el.create_proxy();
-
-			let mut rdr = Renderer::new(&el);
-			let ssize = rdr.get_size();
-			let mut fc = FontConfig::default();
-			fc.resize_screen(ssize);
-			let img = fc.bitw_loader("../bitw/data/lat15_terminus32x16.txt");
-			rdr.upload_tex(img, 0);
-			let mut model = fc.generate_model();
-			let mut tmhandle = None;
-
-			let mut tsize = fc.get_terminal_size_in_char();
-			let mut console = Console::new((tsize[0] as i32, tsize[1] as i32));
-
-			'main_loop: loop {
-				let pty_master = unsafe { OwnedFd::from_raw_fd(pty.master) };
-				let (send, recv) = mpsc::sync_channel(1);
-				{
-					// spawn a thread which reads bytes from the slave
-					// and forwards them to the main thread
-					let mut buf = vec![0; 4 * 1024];
-					std::thread::spawn(move || loop {
-						match unistd::read(pty_master.as_raw_fd(), &mut buf) {
-							Ok(nb) => {
-								let bytes = buf[..nb].to_vec();
-								send.send(bytes).unwrap();
-								proxy.send_event(UserEvent::Flush);
-							}
-							Err(e) => {
-								eprintln!("{:?}", e);
-								proxy.send_event(UserEvent::Quit);
-								break;
-							}
-						}
-					});
-				}
-
-				el.run(move |event, _, ctrl| match event {
-					Event::WindowEvent { event: e, .. } => {
-						match e {
-							WindowEvent::CloseRequested => {
-								*ctrl = ControlFlow::Exit;
-							}
-							WindowEvent::Resized(_) => {
-								let ssize = rdr.get_size();
-								rdr.damage();
-							}
-							WindowEvent::ReceivedCharacter(ch) => {
-								let mut buf = [0_u8; 4];
-								let utf8 = ch.encode_utf8(&mut buf).as_bytes();
-								nix::unistd::write(pty.master, utf8).unwrap();
-							}
-							_ => {}
-						}
-					}
-					Event::RedrawRequested(_window_id) => {
-						rdr.render2();
-					}
-					Event::UserEvent(event) => {
-						match event {
-							UserEvent::Quit => {
-								*ctrl = ControlFlow::Exit;
-							}
-							UserEvent::Flush => {
-								rdr.redraw();
-							}
-						}
-					}
-					Event::MainEventsCleared => {
-						let data = console.render_data();
-						let string = String::from_utf8_lossy(data);
-						model.faces = fc.text2fs(&string, 0);
-						tmhandle = Some(rdr.insert_model(&model));
-						if let Ok(bytes) = recv.try_recv() {
-							for byte in bytes.into_iter() {
-								console.put_char(byte);
-							}
-						}
-						rdr.redraw();
-						*ctrl = ControlFlow::Wait;
-					}
-					_ => {}
-				})
-			}
+			let pty_master = unsafe { OwnedFd::from_raw_fd(pty.master) };
+			main_loop(pty_master);
 		}
 		Ok(unistd::ForkResult::Child) => {
 			unistd::close(pty.master).unwrap();
