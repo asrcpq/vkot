@@ -15,6 +15,7 @@ use winit::event_loop::{ControlFlow, EventLoopBuilder};
 use console::Console;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
+use triangles::model::cmodel::{Face, Model};
 
 struct PTY {
 	pub master: RawFd,
@@ -63,6 +64,7 @@ fn main_loop(pty_master: OwnedFd) {
 	let mut _cmhandle = None; // cursor model
 
 	let tsize = fc.get_terminal_size_in_char();
+	let [fsx, fsy] = fc.get_font_size();
 	let ct = crate::color_table::ColorTable::default();
 	let mut console = Console::new([tsize[0] as i32, tsize[1] as i32]);
 	let pty_master2 = pty_master.try_clone().unwrap();
@@ -126,7 +128,43 @@ fn main_loop(pty_master: OwnedFd) {
 					0,
 				));
 			}
-			_tmhandle = Some(rdr.insert_model(&model));
+			let mut modelref = rdr.insert_model(&model);
+			modelref.set_z(1);
+			_tmhandle = Some(modelref);
+
+			// draw cursor
+			let cursor_pos = [cursor_pos[0] as u32, cursor_pos[1] as u32];
+			let x = (cursor_pos[0] * fsx) as f32;
+			let y1 = (cursor_pos[1] * fsy) as f32;
+			let y2 = ((cursor_pos[1] + 1) * fsy) as f32;
+			let vs = vec![
+				[x, y1, 0.0, 1.0],
+				[x, y2, 0.0, 1.0],
+				[x + 1.0, y1, 0.0, 1.0],
+				[x + 1.0, y2, 0.0, 1.0],
+			];
+			let faces = vec![
+				Face {
+					vid: [0, 1, 2],
+					color: [1.0; 4],
+					uvid: [0; 3],
+					layer: -1,
+				},
+				Face {
+					vid: [3, 1, 2],
+					color: [1.0; 4],
+					uvid: [0; 3],
+					layer: -1,
+				},
+			];
+			let model = Model {
+				vs,
+				uvs: Vec::new(),
+				faces,
+			};
+			let modelref = rdr.insert_model(&model);
+			_cmhandle = Some(modelref);
+
 			rdr.render2();
 		}
 		Event::UserEvent(event) => {

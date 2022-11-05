@@ -1,4 +1,4 @@
-add simple color
+add simple cursor
 
 todos:
 - resize
