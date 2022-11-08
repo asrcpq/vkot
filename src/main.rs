@@ -2,8 +2,8 @@
 mod console;
 mod msg;
 
-use std::io::Read;
-use std::os::unix::net::UnixListener;
+use std::io::{Read, Write};
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
@@ -13,7 +13,23 @@ use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::model::cmodel::{Face, Model};
 
-fn client_handler(proxy: EventLoopProxy<VkotMsg>, rx: Receiver<VkotMsg>) {
+fn sender_handler(rx: Receiver<VkotMsg>) {
+	let mut stream: Option<UnixStream> = None;
+	while let Ok(msg) = rx.recv() {
+		match msg {
+			VkotMsg::Getch(ch) => {
+				stream.as_mut().unwrap().write(&[ch as u8]).unwrap();
+			},
+			VkotMsg::Stream(s) => {
+				eprintln!("sender: update stream");
+				stream = Some(s);
+			}
+			_ => panic!(),
+		}
+	}
+}
+
+fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 	let _ = std::fs::remove_file("./vkot.socket");
 	let listener = UnixListener::bind("./vkot.socket").unwrap();
 	let mut buf = [0u8; 1024];
@@ -25,6 +41,9 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, rx: Receiver<VkotMsg>) {
 				continue
 			}
 		};
+		let mut stream2 = stream.try_clone().unwrap();
+		eprintln!("client: update stream");
+		tx.send(VkotMsg::Stream(stream2)).unwrap();
 		loop {
 			let len = match stream.read(&mut buf) {
 				Ok(s) => s,
@@ -56,7 +75,9 @@ fn main() {
 	let (tx, rx) = channel();
 	let mut console = console::Console::new([tsize[0], tsize[1]]);
 
-	let _ = std::thread::spawn(|| client_handler(proxy, rx));
+	let tx2 = tx.clone();
+	let _ = std::thread::spawn(|| client_handler(proxy, tx2));
+	let _ = std::thread::spawn(|| sender_handler(rx));
 
 	el.run(move |event, _, ctrl| match event {
 		Event::WindowEvent { event: e, .. } => {

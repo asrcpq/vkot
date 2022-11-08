@@ -1,1 +1,1 @@
-prepare send key
+try to implement send key, but not working(new stream also has bug)
