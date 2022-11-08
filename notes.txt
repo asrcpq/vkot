@@ -1,4 +1,4 @@
-add simple cursor
+rewrite
 
-todos:
-- resize
+vkot is not an ordinary UNIX terminal,
+but only a console frontend for simply showing some text(so no pty).

@@ -1,47 +1,16 @@
-mod color_table;
+// mod color_table;
 mod console;
-mod screen_buffer;
+mod msg;
 
-use nix::fcntl::{open, OFlag};
-use nix::pty::{grantpt, posix_openpt, ptsname, unlockpt};
-use nix::sys::stat::Mode;
-use nix::unistd;
-use std::os::unix::io::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-use std::path::Path;
-use std::sync::mpsc;
+use std::io::Read;
+use std::os::unix::net::UnixListener;
+use std::sync::mpsc::{channel, Sender};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
 
-use console::Console;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::model::cmodel::{Face, Model};
-
-struct PTY {
-	pub master: RawFd,
-	pub slave: RawFd,
-}
-
-fn openpty() -> Result<PTY, String> {
-	// Open a new PTY master
-	let master_fd = posix_openpt(OFlag::O_RDWR).unwrap();
-
-	grantpt(&master_fd).unwrap();
-	unlockpt(&master_fd).unwrap();
-
-	// Get the name of the slave
-	let slave_name = unsafe { ptsname(&master_fd).unwrap() };
-
-	// Try to open the slave
-	let slave_fd =
-		open(Path::new(&slave_name), OFlag::O_RDWR, Mode::empty()).unwrap();
-
-	use std::os::unix::io::IntoRawFd;
-	Ok(PTY {
-		master: master_fd.into_raw_fd(),
-		slave: slave_fd,
-	})
-}
 
 #[derive(Debug)]
 enum UserEvent {
@@ -49,7 +18,31 @@ enum UserEvent {
 	Quit,
 }
 
-fn main_loop(pty_master: OwnedFd) {
+fn client_handler(tx: Sender<msg::VkotMsg>) {
+	let _ = std::fs::remove_file("./vkot.socket");
+	let listener = UnixListener::bind("./vkot.socket").unwrap();
+	let mut buf = [0u8; 1024];
+	for stream in listener.incoming() {
+		let mut stream = match stream {
+			Ok(s) => s,
+			Err(e) => {
+				eprintln!("{:?}", e);
+				continue
+			}
+		};
+		loop {
+			let len = match stream.read(&mut buf) {
+				Ok(s) => s,
+				Err(e) => break,
+			};
+			// FIXME
+			let string = String::from_utf8_lossy(&buf[..len]);
+			tx.send(msg::VkotMsg::Print(string.to_string())).unwrap();
+		}
+	}
+}
+
+fn main() {
 	let el = EventLoopBuilder::<UserEvent>::with_user_event().build();
 	let proxy = el.create_proxy();
 
@@ -65,27 +58,10 @@ fn main_loop(pty_master: OwnedFd) {
 
 	let tsize = fc.get_terminal_size_in_char();
 	let [fsx, fsy] = fc.get_font_size();
-	let ct = crate::color_table::ColorTable::default();
-	let mut console = Console::new([tsize[0] as i32, tsize[1] as i32]);
-	let pty_master2 = pty_master.try_clone().unwrap();
+	let (tx, rx) = channel();
+	let mut console = console::Console::new([tsize[0], tsize[1]]);
 
-	let (send, recv) = mpsc::sync_channel(1);
-	std::thread::spawn(move || {
-		let mut buf = vec![0; 4 * 1024];
-		loop {
-			match unistd::read(pty_master.as_raw_fd(), &mut buf) {
-				Ok(nb) => {
-					let bytes = buf[..nb].to_vec();
-					send.send(bytes).unwrap();
-					proxy.send_event(UserEvent::Flush).unwrap();
-				}
-				Err(e) => {
-					eprintln!("{:?}", e);
-					proxy.send_event(UserEvent::Quit).unwrap();
-					break;
-				}
-			}
-	}});
+	let _ = std::thread::spawn(|| client_handler(tx));
 
 	el.run(move |event, _, ctrl| match event {
 		Event::WindowEvent { event: e, .. } => {
@@ -98,30 +74,27 @@ fn main_loop(pty_master: OwnedFd) {
 				}
 				WindowEvent::ReceivedCharacter(ch) => {
 					let mut buf = [0_u8; 4];
-					let utf8 = ch.encode_utf8(&mut buf).as_bytes();
-					nix::unistd::write(pty_master2.as_raw_fd(), utf8).unwrap();
+					let _utf8 = ch.encode_utf8(&mut buf).as_bytes();
+					// TODO: send
 				}
 				_ => {}
 			}
 		}
 		Event::RedrawRequested(_window_id) => {
-			if let Ok(bytes) = recv.try_recv() {
-				for ch in String::from_utf8_lossy(&bytes).chars() {
-					console.put_char(ch);
-				}
+			if let Ok(msg) = rx.try_recv() {
+				console.handle_msg(msg);
 			}
-			let [tx, ty] = console.get_size();
-			let [tx, _] = [tx as u32, ty as u32];
+			let [tx, _] = console.get_size();
 			model.faces = Vec::new();
 			let (chars, cursor_pos) = console.render_data();
-			for (idx, (ch, color)) in chars.iter().enumerate() {
+			for (idx, ch) in chars.iter().enumerate() {
 				let idx = idx as u32;
 				let offset_x = idx % tx;
 				let offset_y = idx / tx;
 				model.faces.extend(fc.text2fs(
 					[offset_x, offset_y],
 					std::iter::once(*ch),
-					ct.rgb_from_256color(*color),
+					[1.0; 4],
 					0,
 				));
 			}
@@ -180,39 +153,4 @@ fn main_loop(pty_master: OwnedFd) {
 		}
 		_ => {}
 	})
-}
-
-fn main() {
-	let pty = openpty().unwrap();
-
-	let result = unsafe {unistd::fork()};
-	match result {
-		Ok(unistd::ForkResult::Parent { .. }) => {
-			unistd::close(pty.slave).unwrap();
-			let pty_master = unsafe { OwnedFd::from_raw_fd(pty.master) };
-			main_loop(pty_master);
-		}
-		Ok(unistd::ForkResult::Child) => {
-			unistd::close(pty.master).unwrap();
-
-			// create process group
-			unistd::setsid().unwrap();
-
-			const TIOCSCTTY: usize = 0x540E;
-			nix::ioctl_write_int_bad!(tiocsctty, TIOCSCTTY);
-			unsafe { tiocsctty(pty.slave, 0).unwrap() };
-
-			unistd::dup2(pty.slave, 0).unwrap(); // stdin
-			unistd::dup2(pty.slave, 1).unwrap(); // stdout
-			unistd::dup2(pty.slave, 2).unwrap(); // stderr
-			unistd::close(pty.slave).unwrap();
-
-			use std::ffi::CString;
-			let path = CString::new("/bin/bash").unwrap();
-			std::env::set_var("TERM", "vt100");
-
-			unistd::execv::<CString>(&path, &[]).unwrap();
-		}
-		Err(_) => {}
-	}
 }
