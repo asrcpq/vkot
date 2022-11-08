@@ -4,21 +4,16 @@ mod msg;
 
 use std::io::Read;
 use std::os::unix::net::UnixListener;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoopBuilder};
+use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 
+use msg::VkotMsg;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::model::cmodel::{Face, Model};
 
-#[derive(Debug)]
-enum UserEvent {
-	Flush,
-	Quit,
-}
-
-fn client_handler(tx: Sender<msg::VkotMsg>) {
+fn client_handler(proxy: EventLoopProxy<VkotMsg>, rx: Receiver<VkotMsg>) {
 	let _ = std::fs::remove_file("./vkot.socket");
 	let listener = UnixListener::bind("./vkot.socket").unwrap();
 	let mut buf = [0u8; 1024];
@@ -37,13 +32,13 @@ fn client_handler(tx: Sender<msg::VkotMsg>) {
 			};
 			// FIXME
 			let string = String::from_utf8_lossy(&buf[..len]);
-			tx.send(msg::VkotMsg::Print(string.to_string())).unwrap();
+			proxy.send_event(VkotMsg::Print(string.to_string())).unwrap();
 		}
 	}
 }
 
 fn main() {
-	let el = EventLoopBuilder::<UserEvent>::with_user_event().build();
+	let el = EventLoopBuilder::<VkotMsg>::with_user_event().build();
 	let proxy = el.create_proxy();
 
 	let mut rdr = Renderer::new(&el);
@@ -61,7 +56,7 @@ fn main() {
 	let (tx, rx) = channel();
 	let mut console = console::Console::new([tsize[0], tsize[1]]);
 
-	let _ = std::thread::spawn(|| client_handler(tx));
+	let _ = std::thread::spawn(|| client_handler(proxy, rx));
 
 	el.run(move |event, _, ctrl| match event {
 		Event::WindowEvent { event: e, .. } => {
@@ -81,9 +76,6 @@ fn main() {
 			}
 		}
 		Event::RedrawRequested(_window_id) => {
-			if let Ok(msg) = rx.try_recv() {
-				console.handle_msg(msg);
-			}
 			let [tx, _] = console.get_size();
 			model.faces = Vec::new();
 			let (chars, cursor_pos) = console.render_data();
@@ -137,15 +129,9 @@ fn main() {
 
 			rdr.render2();
 		}
-		Event::UserEvent(event) => {
-			match event {
-				UserEvent::Quit => {
-					*ctrl = ControlFlow::Exit;
-				}
-				UserEvent::Flush => {
-					rdr.redraw();
-				}
-			}
+		Event::UserEvent(msg) => {
+			console.handle_msg(msg);
+			rdr.redraw();
 		}
 		Event::MainEventsCleared => {
 			rdr.redraw();

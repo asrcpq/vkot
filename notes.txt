@@ -1,4 +1,1 @@
-rewrite
-
-vkot is not an ordinary UNIX terminal,
-but only a console frontend for simply showing some text(so no pty).
+prepare send key
