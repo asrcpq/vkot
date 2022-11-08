@@ -70,11 +70,9 @@ fn main_loop(pty_master: OwnedFd) {
 	let pty_master2 = pty_master.try_clone().unwrap();
 
 	let (send, recv) = mpsc::sync_channel(1);
-	{
-		// spawn a thread which reads bytes from the slave
-		// and forwards them to the main thread
+	std::thread::spawn(move || {
 		let mut buf = vec![0; 4 * 1024];
-		std::thread::spawn(move || loop {
+		loop {
 			match unistd::read(pty_master.as_raw_fd(), &mut buf) {
 				Ok(nb) => {
 					let bytes = buf[..nb].to_vec();
@@ -87,8 +85,7 @@ fn main_loop(pty_master: OwnedFd) {
 					break;
 				}
 			}
-		});
-	}
+	}});
 
 	el.run(move |event, _, ctrl| match event {
 		Event::WindowEvent { event: e, .. } => {
