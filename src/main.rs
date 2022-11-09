@@ -18,7 +18,7 @@ fn sender_handler(rx: Receiver<VkotMsg>) {
 	while let Ok(msg) = rx.recv() {
 		match msg {
 			VkotMsg::Getch(ch) => {
-				stream.as_mut().unwrap().write(&[ch as u8]).unwrap();
+				let _ = stream.as_mut().unwrap().write(&[ch as u8]);
 			},
 			VkotMsg::Stream(s) => {
 				eprintln!("sender: update stream");
@@ -49,10 +49,11 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 				Ok(s) => s,
 				Err(e) => break,
 			};
-			// FIXME
+			if len == 0 { break }
 			let string = String::from_utf8_lossy(&buf[..len]);
 			proxy.send_event(VkotMsg::Print(string.to_string())).unwrap();
 		}
+		eprintln!("client: break");
 	}
 }
 
@@ -91,7 +92,7 @@ fn main() {
 				WindowEvent::ReceivedCharacter(ch) => {
 					let mut buf = [0_u8; 4];
 					let _utf8 = ch.encode_utf8(&mut buf).as_bytes();
-					// TODO: send
+					tx.send(VkotMsg::Getch(ch)).unwrap();
 				}
 				_ => {}
 			}
