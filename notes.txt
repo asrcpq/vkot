@@ -1,1 +1,1 @@
-move color table to client side
+handle resize

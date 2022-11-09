@@ -78,7 +78,7 @@ fn main() {
 	let tsize = fc.get_terminal_size_in_char();
 	let [fsx, fsy] = fc.get_font_size();
 	let (tx, rx) = channel();
-	let mut console = console::Console::new([tsize[0], tsize[1]]);
+	let mut console = console::Console::new(tsize);
 
 	let tx2 = tx.clone();
 	let _ = std::thread::spawn(|| client_handler(proxy, tx2));
@@ -92,6 +92,12 @@ fn main() {
 				}
 				WindowEvent::Resized(_) => {
 					rdr.damage();
+					let ssize = rdr.get_size();
+					fc.resize_screen(ssize);
+					model = fc.generate_model();
+					let tsize = fc.get_terminal_size_in_char();
+					console.resize(tsize);
+					rdr.redraw();
 				}
 				WindowEvent::ReceivedCharacter(ch) => {
 					let mut buf = [0_u8; 4];
@@ -102,20 +108,18 @@ fn main() {
 			}
 		}
 		Event::RedrawRequested(_window_id) => {
-			let [tx, _] = console.get_size();
 			let cells = console.get_buffer();
 			let cpos = console.get_cpos();
 			model.faces = Vec::new();
-			for (idx, cell) in cells.iter().enumerate() {
-				let idx = idx as u32;
-				let offset_x = idx % tx;
-				let offset_y = idx / tx;
-				model.faces.extend(fc.text2fs(
-					[offset_x, offset_y],
-					std::iter::once(cell.ch),
-					cell.color,
-					0,
-				));
+			for (py, line) in cells.iter().enumerate() {
+				for (px, cell) in line.iter().enumerate() {
+					model.faces.extend(fc.text2fs(
+						[px as u32, py as u32],
+						std::iter::once(cell.ch),
+						cell.color,
+						0,
+					));
+				}
 			}
 			let mut modelref = rdr.insert_model(&model);
 			modelref.set_z(1);
