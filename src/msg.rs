@@ -36,7 +36,9 @@ impl VkotMsg {
 				b'c' => {
 					let mut color = [0f32; 4];
 					for i in 0..4 {
-						color[i] = Ble::read_f32(&buf[i * 4..4 + i * 4]);
+						color[i] = Ble::read_f32(
+							&buf[*offset + i * 4..*offset + 4 + i * 4]
+						);
 					}
 					*offset += 16;
 					Self::SetColor(color)
