@@ -41,17 +41,17 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 				continue
 			}
 		};
-		let mut stream2 = stream.try_clone().unwrap();
+		let stream2 = stream.try_clone().unwrap();
 		eprintln!("client: update stream");
 		tx.send(VkotMsg::Stream(stream2)).unwrap();
 		loop {
 			let len = match stream.read(&mut buf) {
 				Ok(s) => s,
-				Err(e) => break,
+				Err(_) => break,
 			};
 			if len == 0 { break }
-			let string = String::from_utf8_lossy(&buf[..len]);
-			proxy.send_event(VkotMsg::Print(string.to_string())).unwrap();
+			let msg = VkotMsg::from_buf(&buf[..len]).unwrap();
+			proxy.send_event(msg).unwrap();
 		}
 		eprintln!("client: break");
 	}

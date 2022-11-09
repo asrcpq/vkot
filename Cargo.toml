@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 winit = "0.27"
 triangles = {path = "../triangles"}
+anyhow = "1"

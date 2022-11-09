@@ -1,1 +1,1 @@
-fix input and new stream
+add move cursor

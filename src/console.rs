@@ -28,6 +28,10 @@ impl Console {
 					self.buffer[idx + offset] = *ch;
 				}
 			}
+			VkotMsg::MoveCursor(pos) => {
+				eprintln!("move cursor to {:?}", pos);
+				self.cpos = pos;
+			}
 			_ => panic!(),
 		}
 	}
