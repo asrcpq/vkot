@@ -4,12 +4,16 @@ use std::os::unix::net::UnixStream;
 
 #[derive(Debug)]
 pub enum VkotMsg {
+	// client -> server
 	Print(String),
 	MoveCursor([u32; 2]),
 	SetColor([f32; 4]),
 	Clear,
 
+	// server -> client
 	Getch(char),
+
+	// server internal
 	Stream(UnixStream),
 }
 
