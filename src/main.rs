@@ -50,8 +50,10 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 				Err(_) => break,
 			};
 			if len == 0 { break }
-			let msg = VkotMsg::from_buf(&buf[..len]).unwrap();
-			proxy.send_event(msg).unwrap();
+			let msgs = VkotMsg::from_buf(&buf[..len], &mut 0).unwrap();
+			for msg in msgs.into_iter() {
+				proxy.send_event(msg).unwrap();
+			}
 		}
 		eprintln!("client: break");
 	}
@@ -99,16 +101,17 @@ fn main() {
 		}
 		Event::RedrawRequested(_window_id) => {
 			let [tx, _] = console.get_size();
+			let cells = console.get_buffer();
+			let cpos = console.get_cpos();
 			model.faces = Vec::new();
-			let (chars, cursor_pos) = console.render_data();
-			for (idx, ch) in chars.iter().enumerate() {
+			for (idx, cell) in cells.iter().enumerate() {
 				let idx = idx as u32;
 				let offset_x = idx % tx;
 				let offset_y = idx / tx;
 				model.faces.extend(fc.text2fs(
 					[offset_x, offset_y],
-					std::iter::once(*ch),
-					[1.0; 4],
+					std::iter::once(cell.ch),
+					cell.color,
 					0,
 				));
 			}
@@ -117,10 +120,9 @@ fn main() {
 			_tmhandle = Some(modelref);
 
 			// draw cursor
-			let cursor_pos = [cursor_pos[0] as u32, cursor_pos[1] as u32];
-			let x = (cursor_pos[0] * fsx) as f32;
-			let y1 = (cursor_pos[1] * fsy) as f32;
-			let y2 = ((cursor_pos[1] + 1) * fsy) as f32;
+			let x = (cpos[0] * fsx) as f32;
+			let y1 = (cpos[1] * fsy) as f32;
+			let y2 = ((cpos[1] + 1) * fsy) as f32;
 			let vs = vec![
 				[x, y1, 0.0, 1.0],
 				[x, y2, 0.0, 1.0],
