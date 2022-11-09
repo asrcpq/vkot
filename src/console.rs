@@ -52,6 +52,10 @@ impl Console {
 				let chars: Vec<char> = string.chars().collect();
 				let offset = self.p2i(self.cpos);
 				for (idx, ch) in chars.iter().enumerate() {
+					if idx + offset >= self.buffer.len() {
+						eprintln!("overflow");
+						break
+					}
 					self.buffer[idx + offset] = Cell {
 						ch: *ch,
 						color: self.current_color,

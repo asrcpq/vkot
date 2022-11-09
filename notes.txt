@@ -1,1 +1,1 @@
-add color test
+minor exception fix

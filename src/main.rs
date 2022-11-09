@@ -18,7 +18,9 @@ fn sender_handler(rx: Receiver<VkotMsg>) {
 	while let Ok(msg) = rx.recv() {
 		match msg {
 			VkotMsg::Getch(ch) => {
-				let _ = stream.as_mut().unwrap().write(&[ch as u8]);
+				if let Some(stream) = stream.as_mut() {
+					let _ = stream.write(&[ch as u8]);
+				}
 			},
 			VkotMsg::Stream(s) => {
 				eprintln!("sender: update stream");
