@@ -1,1 +1,1 @@
-split client lib
+move color table to client side
