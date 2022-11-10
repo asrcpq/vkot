@@ -1,17 +1,21 @@
 use anyhow::{anyhow, Result};
-use byteorder::{ByteOrder, LittleEndian as Ble};
+use std::convert::TryInto;
 use std::os::unix::net::UnixStream;
 
-const REMAIN_LOOKUP: [usize; 5] = [4, 5, 16, 0, 1];
+fn read_u32(bytes: &[u8]) -> u32 {
+	u32::from_le_bytes(bytes.try_into().unwrap())
+}
+
+fn read_i16(bytes: &[u8]) -> i16 {
+	i16::from_le_bytes(bytes.try_into().unwrap())
+}
 
 #[derive(Debug)]
 pub enum VkotMsg {
 	// client -> server
-	Print(char),
-	Loc(u8, i32), // 0-4: x_abs, y_abs, x_rel, y_rel
-	SetColor([f32; 4]),
-	Clear,
-	TextMode(bool),
+	Blit([i16; 4], Vec<(u32, u32)>),
+	Put([i16; 2], (u32, u32)),
+	Cursor([i16; 2]),
 
 	// server -> client
 	Getch(u32),
@@ -33,62 +37,57 @@ impl VkotMsg {
 	pub fn from_buf(buf: &[u8], offset: &mut usize) -> Result<Vec<Self>> {
 		let mut result = Vec::new();
 		let buflen = buf.len();
-		while *offset < buflen {
+		loop {
 			let b0 = buf[*offset];
-			if b0 < 128 {
-				let msg = Self::Print(b0 as char);
-				result.push(msg);
-				*offset += 1;
-				continue
-			}
-			let b0 = b0 - 128;
-			let remain = buflen - *offset - 1; // always positive
-			if remain < REMAIN_LOOKUP[b0 as usize] {
-				break
+			let mut region = [0i16; 4];
+			let mut blit_len = 0;
+			let test_len = match b0 {
+				1 => 13,
+				2 => 5,
+				0 => {
+					if *offset + 9 >= buflen {
+						return Ok(result)
+					}
+					for idx in 0..4 {
+						region[idx] = read_i16(&buf[*offset + idx * 2 + 1..*offset + idx * 2 + 3]);
+					}
+					blit_len = ((region[1] - region[0]) * (region[3] - region[2])) as usize;
+					blit_len + 9
+				}
+				_ => panic!()
+			};
+			if *offset + test_len >= buflen {
+				return Ok(result);
 			}
 			*offset += 1;
+
 			let msg = match b0 {
-				0 => {
-					let ch = Ble::read_u32(&buf[*offset..*offset + 4]);
-					*offset += 4;
-					let ch = match char::from_u32(ch) {
-						Some(ch) => ch,
-						None => {
-							eprintln!("ERROR: ignore invalid char {}", ch);
-							continue
-						}
-					};
-					Self::Print(ch)
-				}
 				1 => {
-					let i1 = buf[*offset];
-					let i2 = Ble::read_i32(&buf[*offset + 1..*offset + 5]);
-					*offset += 5;
-					// eprintln!("loc {} {}", i1, i2);
-					Self::Loc(i1, i2)
+					let cx = read_i16(&buf[*offset..*offset + 2]);
+					let cy = read_i16(&buf[*offset + 2..*offset + 4]);
+					let cu = read_u32(&buf[*offset + 4..*offset + 8]);
+					let cc = read_u32(&buf[*offset + 8..*offset + 12]);
+					*offset += 12;
+					VkotMsg::Put([cx, cy], (cu, cc))
 				}
 				2 => {
-					let mut color = [0f32; 4];
-					for i in 0..4 {
-						color[i] = Ble::read_f32(
-							&buf[*offset + i * 4..*offset + 4 + i * 4]
-						);
-					}
-					*offset += 16;
-					Self::SetColor(color)
+					let cx = read_i16(&buf[*offset..*offset + 2]);
+					let cy = read_i16(&buf[*offset + 2..*offset + 4]);
+					*offset += 4;
+					VkotMsg::Cursor([cx, cy])
 				}
-				3 => {
-					Self::Clear
+				0 => {
+					*offset += 8;
+					let v = (0..blit_len).map(|idx| {
+						let cu = read_u32(&buf[*offset + idx * 8..*offset + idx * 8 + 4]);
+						let cc = read_u32(&buf[*offset + idx * 8 + 4..*offset + idx * 8 + 8]);
+						(cu, cc)
+					}).collect::<Vec<_>>();
+					VkotMsg::Blit(region, v)
 				}
-				4 => {
-					let b = buf[*offset];
-					*offset += 1;
-					Self::TextMode(b == 1)
-				}
-				c => return Err(anyhow!("unknown message type {:?}", c as char))
+				_ => panic!(),
 			};
 			result.push(msg);
 		}
-		Ok(result)
 	}
 }

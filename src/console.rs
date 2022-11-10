@@ -1,12 +1,9 @@
 use crate::msg::VkotMsg;
-use triangles::bmtext::wide_test;
 
 pub struct Console {
 	size: [u32; 2],
 	buffer: Vec<Vec<Cell>>, // row first
-	current_color: [f32; 4],
-	cpos: [i32; 2],
-	text_mode: bool,
+	cpos: [i16; 2],
 }
 
 #[derive(Clone)]
@@ -24,6 +21,11 @@ impl Default for Cell {
 	}
 }
 
+fn color_from_u32(uc: u32) -> [f32; 4] {
+	let bs = uc.to_le_bytes();
+	core::array::from_fn(|idx| bs[idx] as f32 / 255.0)
+}
+
 impl Console {
 	fn clear(&mut self) {
 		self.buffer = vec![
@@ -36,9 +38,7 @@ impl Console {
 		let mut result = Self {
 			size,
 			buffer: Vec::new(),
-			current_color: [0.0; 4],
 			cpos: [0, 0],
-			text_mode: true,
 		};
 		result.clear();
 		result
@@ -57,61 +57,31 @@ impl Console {
 		self.size = size;
 	}
 
-	pub fn putchar(&mut self, ch: char) {
-		self.buffer[self.cpos[1] as usize][self.cpos[0] as usize] = Cell {
-			ch,
-			color: self.current_color,
+	fn putchar(&mut self, [px, py]: [i16; 2], ch: u32, color: u32) {
+		self.buffer[px as usize][py as usize] = Cell {
+			ch: char::from_u32(ch).unwrap(),
+			color: color_from_u32(color),
 		}
-	}
-
-	pub fn limit_cpos(&mut self) {
-		for i in 0..2 {
-			if self.cpos[i] < 0 {
-				self.cpos[i] = 0;
-			} else if self.cpos[i] >= self.size[i] as i32 {
-				self.cpos[i] = self.size[i] as i32 - 1;
-			}
-		}
-	}
-
-	pub fn move_cursor(&mut self, ty: u8, pos: i32) {
-		match ty {
-			0 => self.cpos[0] = pos,
-			1 => self.cpos[1] = pos,
-			2 => self.cpos[0] += pos,
-			3 => self.cpos[1] += pos,
-			_ => panic!(),
-		}
-		self.limit_cpos();
 	}
 
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
 		match msg {
-			VkotMsg::Print(ch) => {
-				self.putchar(ch);
-				if self.text_mode {
-					if wide_test(ch) {
-						// TODO: wrap
-						self.move_cursor(2, 2);
-					} else {
-						self.move_cursor(2, 1);
+			VkotMsg::Blit(region, data) => {
+				let mut idx = 0;
+				for px in region[0]..region[1] {
+					for py in region[2]..region[3] {
+						let (ch, color) = data[idx];
+						self.putchar([px, py], ch, color);
+						idx += 1;
 					}
 				}
-			}
-			VkotMsg::Loc(ty, pos) => {
-				self.move_cursor(ty, pos);
-			}
-			VkotMsg::SetColor(color) => {
-				// eprintln!("set color {:?}", color);
-				self.current_color = color;
-			}
-			VkotMsg::Clear => {
-				eprintln!("cls");
-				self.clear();
-			}
-			VkotMsg::TextMode(on) => {
-				self.text_mode = on;
-			}
+			},
+			VkotMsg::Cursor(pos) => {
+				self.cpos = pos;
+			},
+			VkotMsg::Put(pos, (ch, color)) => {
+				self.putchar(pos, ch, color);
+			},
 			_ => panic!(),
 		}
 	}
@@ -120,7 +90,7 @@ impl Console {
 		&self.buffer
 	}
 
-	pub fn get_cpos(&self) -> [i32; 2] {
+	pub fn get_cpos(&self) -> [i16; 2] {
 		self.cpos
 	}
 }

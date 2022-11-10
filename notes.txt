@@ -1,1 +1,1 @@
-simplify
+refactoring, move buffer handling to client side

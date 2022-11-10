@@ -102,7 +102,7 @@ fn main() {
 
 	let tsize = fc.get_terminal_size_in_char();
 	let [fsx, fsy] = fc.get_scaled_font_size();
-	let [fsx, fsy] = [fsx as i32, fsy as i32];
+	let [fsx, fsy] = [fsx as i16, fsy as i16];
 	let (tx, rx) = channel();
 	let mut console = console::Console::new(tsize);
 
@@ -127,8 +127,6 @@ fn main() {
 					tx.send(VkotMsg::Resized(ssize)).unwrap();
 				}
 				WindowEvent::ReceivedCharacter(ch) => {
-					let mut buf = [0_u8; 4];
-					let _utf8 = ch.encode_utf8(&mut buf).as_bytes();
 					tx.send(VkotMsg::Getch(ch as u32)).unwrap();
 				}
 				_ => {}
