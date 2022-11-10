@@ -57,6 +57,7 @@ impl VkotMsg {
 					let i1 = buf[*offset];
 					let i2 = Ble::read_i32(&buf[*offset + 1..*offset + 5]);
 					*offset += 5;
+					// eprintln!("loc {} {}", i1, i2);
 					Self::Loc(i1, i2)
 				}
 				2 => {
