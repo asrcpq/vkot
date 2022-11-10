@@ -2,7 +2,7 @@
 mod console;
 mod msg;
 
-use std::io::{Read, Write};
+use std::io::{Read, Write, BufWriter};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use winit::event::{Event, WindowEvent};
@@ -13,17 +13,39 @@ use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::model::cmodel::{Face, Model};
 
+type Swriter = BufWriter<UnixStream>;
+
+fn sender_handler2(sw: &mut Swriter, msg: VkotMsg) -> std::io::Result<()> {
+	match msg {
+		VkotMsg::Getch(ch) => {
+			let _ = sw.write(&[b'g'])?;
+			let _ = sw.write(&ch.to_le_bytes())?;
+			sw.flush()?;
+		},
+		VkotMsg::Resized([tx, ty]) => {
+			let _ = sw.write(&[b'r'])?;
+			let _ = sw.write(&tx.to_le_bytes())?;
+			let _ = sw.write(&ty.to_le_bytes())?;
+			sw.flush()?;
+		},
+		_ => panic!()
+	}
+	Ok(())
+}
+
 fn sender_handler(rx: Receiver<VkotMsg>) {
-	let mut stream: Option<UnixStream> = None;
+	let mut stream: Option<Swriter> = None;
 	while let Ok(msg) = rx.recv() {
+		if msg.is_s2c() {
+			if let Some(stream) = stream.as_mut() {
+				let _ = sender_handler2(stream, msg);
+			}
+			continue
+		}
 		match msg {
-			VkotMsg::Getch(ch) => {
-				if let Some(stream) = stream.as_mut() {
-					let _ = stream.write(&[ch as u8]);
-				}
-			},
 			VkotMsg::Stream(s) => {
 				eprintln!("sender: update stream");
+				let s = BufWriter::new(s);
 				stream = Some(s);
 			}
 			_ => panic!(),
@@ -98,11 +120,12 @@ fn main() {
 					let tsize = fc.get_terminal_size_in_char();
 					console.resize(tsize);
 					rdr.redraw();
+					tx.send(VkotMsg::Resized(ssize)).unwrap();
 				}
 				WindowEvent::ReceivedCharacter(ch) => {
 					let mut buf = [0_u8; 4];
 					let _utf8 = ch.encode_utf8(&mut buf).as_bytes();
-					tx.send(VkotMsg::Getch(ch)).unwrap();
+					tx.send(VkotMsg::Getch(ch as u32)).unwrap();
 				}
 				_ => {}
 			}

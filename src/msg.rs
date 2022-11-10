@@ -11,13 +11,22 @@ pub enum VkotMsg {
 	Clear,
 
 	// server -> client
-	Getch(char),
+	Getch(u32),
+	Resized([u32; 2]),
 
 	// server internal
 	Stream(UnixStream),
 }
 
 impl VkotMsg {
+	pub fn is_s2c(&self) -> bool {
+		match self {
+			Self::Getch(_) => true,
+			Self::Resized(_) => true,
+			_ => false,
+		}
+	}
+
 	pub fn from_buf(buf: &[u8], offset: &mut usize) -> Result<Vec<Self>> {
 		let mut result = Vec::new();
 		while *offset < buf.len() {
