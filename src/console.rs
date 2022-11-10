@@ -4,7 +4,7 @@ pub struct Console {
 	size: [u32; 2],
 	buffer: Vec<Vec<Cell>>, // row first
 	current_color: [f32; 4],
-	cpos: [u32; 2],
+	cpos: [i32; 2],
 }
 
 #[derive(Clone)]
@@ -59,30 +59,39 @@ impl Console {
 		self.size = size;
 	}
 
+	pub fn putchar(&mut self, ch: char) {
+		self.buffer[self.cpos[1] as usize][self.cpos[0] as usize] = Cell {
+			ch,
+			color: self.current_color,
+		}
+	}
+
+	pub fn limit_cpos(&mut self) {
+		for i in 0..2 {
+			if self.cpos[i] < 0 {
+				self.cpos[i] = 0;
+			} else if self.cpos[i] >= self.size[i] as i32 {
+				self.cpos[i] = self.size[i] as i32 - 1;
+			}
+		}
+	}
+
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
 		match msg {
-			VkotMsg::Print(string) => {
-				eprintln!("print {}", string.len());
-				let chars: Vec<char> = string.chars().collect();
-				for (idx, ch) in chars.iter().enumerate() {
-					let px = idx as u32 + self.cpos[0];
-					let py = self.cpos[1];
-					if px >= self.size[0] || py >= self.size[1] {
-						eprintln!("overflow");
-						break
-					}
-					self.buffer[py as usize][px as usize] = Cell {
-						ch: *ch,
-						color: self.current_color,
-					}
-				}
+			VkotMsg::Print(ch) => {
+				self.putchar(ch);
 			}
-			VkotMsg::MoveCursor(pos) => {
-				eprintln!("move cursor to {:?}", pos);
-				self.cpos = pos;
+			VkotMsg::Loc(ty, pos) => {
+				match ty {
+					0 => self.cpos[0] = pos,
+					1 => self.cpos[1] = pos,
+					2 => self.cpos[0] += pos,
+					3 => self.cpos[1] += pos,
+					_ => panic!(),
+				}
+				self.limit_cpos();
 			}
 			VkotMsg::SetColor(color) => {
-				eprintln!("set color to {:?}", color);
 				self.current_color = color;
 			}
 			VkotMsg::Clear => {
@@ -97,7 +106,7 @@ impl Console {
 		&self.buffer
 	}
 
-	pub fn get_cpos(&self) -> [u32; 2] {
+	pub fn get_cpos(&self) -> [i32; 2] {
 		self.cpos
 	}
 }

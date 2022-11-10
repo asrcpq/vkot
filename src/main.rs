@@ -57,6 +57,7 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 	let _ = std::fs::remove_file("./vkot.socket");
 	let listener = UnixListener::bind("./vkot.socket").unwrap();
 	let mut buf = [0u8; 1024];
+	let mut bufv = Vec::new();
 	for stream in listener.incoming() {
 		let mut stream = match stream {
 			Ok(s) => s,
@@ -74,7 +75,10 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 				Err(_) => break,
 			};
 			if len == 0 { break }
-			let msgs = VkotMsg::from_buf(&buf[..len], &mut 0).unwrap();
+			bufv.extend(buf[..len].to_vec());
+			let mut offset = 0;
+			let msgs = VkotMsg::from_buf(&bufv, &mut offset).unwrap();
+			bufv.drain(..offset);
 			for msg in msgs.into_iter() {
 				proxy.send_event(msg).unwrap();
 			}
@@ -99,6 +103,7 @@ fn main() {
 
 	let tsize = fc.get_terminal_size_in_char();
 	let [fsx, fsy] = fc.get_font_size();
+	let [fsx, fsy] = [fsx as i32, fsy as i32];
 	let (tx, rx) = channel();
 	let mut console = console::Console::new(tsize);
 

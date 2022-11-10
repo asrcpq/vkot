@@ -2,11 +2,13 @@ use anyhow::{anyhow, Result};
 use byteorder::{ByteOrder, LittleEndian as Ble};
 use std::os::unix::net::UnixStream;
 
+const REMAIN_LOOKUP: [usize; 4] = [4, 5, 16, 0];
+
 #[derive(Debug)]
 pub enum VkotMsg {
 	// client -> server
-	Print(String),
-	MoveCursor([u32; 2]),
+	Print(char),
+	Loc(u8, i32), // 0-4: x_abs, y_abs, x_rel, y_rel
 	SetColor([f32; 4]),
 	Clear,
 
@@ -29,24 +31,35 @@ impl VkotMsg {
 
 	pub fn from_buf(buf: &[u8], offset: &mut usize) -> Result<Vec<Self>> {
 		let mut result = Vec::new();
-		while *offset < buf.len() {
+		let buflen = buf.len();
+		while *offset < buflen {
 			let b0 = buf[*offset];
+			if b0 < 128 {
+				let msg = Self::Print(b0 as char);
+				result.push(msg);
+				*offset += 1;
+				continue
+			}
+			let b0 = b0 - 128;
 			*offset += 1;
+			let remain = buflen - *offset;
+			if remain < REMAIN_LOOKUP[b0 as usize] {
+				break
+			}
 			let msg = match b0 {
-				b'p' => {
-					let len = Ble::read_u32(&buf[*offset..*offset + 4]) as usize;
+				0 => {
+					let ch = Ble::read_u32(&buf[*offset..*offset + 4]);
+					let ch = char::from_u32(ch).unwrap();
 					*offset += 4;
-					let string = String::from_utf8_lossy(&buf[*offset..*offset + len]).to_string();
-					*offset += len;
-					Self::Print(string)
+					Self::Print(ch)
 				}
-				b'm' => {
-					let u1 = Ble::read_u32(&buf[*offset..*offset + 4]);
-					let u2 = Ble::read_u32(&buf[*offset + 4..*offset + 8]);
-					*offset += 8;
-					Self::MoveCursor([u1, u2])
+				1 => {
+					let i1 = buf[*offset];
+					let i2 = Ble::read_i32(&buf[*offset + 1..*offset + 5]);
+					*offset += 5;
+					Self::Loc(i1, i2)
 				}
-				b'c' => {
+				2 => {
 					let mut color = [0f32; 4];
 					for i in 0..4 {
 						color[i] = Ble::read_f32(
@@ -56,15 +69,12 @@ impl VkotMsg {
 					*offset += 16;
 					Self::SetColor(color)
 				}
-				b'C' => {
+				3 => {
 					Self::Clear
 				}
 				c => return Err(anyhow!("unknown message type {:?}", c as char))
 			};
 			result.push(msg);
-		}
-		if *offset != buf.len() {
-			eprintln!("bad msg: {:?}", String::from_utf8_lossy(buf))
 		}
 		Ok(result)
 	}
