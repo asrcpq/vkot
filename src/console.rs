@@ -102,6 +102,7 @@ impl Console {
 				self.move_cursor(ty, pos);
 			}
 			VkotMsg::SetColor(color) => {
+				// eprintln!("set color {:?}", color);
 				self.current_color = color;
 			}
 			VkotMsg::Clear => {

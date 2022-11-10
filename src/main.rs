@@ -101,7 +101,7 @@ fn main() {
 	let mut _cmhandle = None; // cursor model
 
 	let tsize = fc.get_terminal_size_in_char();
-	let [fsx, fsy] = fc.get_font_size();
+	let [fsx, fsy] = fc.get_scaled_font_size();
 	let [fsx, fsy] = [fsx as i32, fsy as i32];
 	let (tx, rx) = channel();
 	let mut console = console::Console::new(tsize);
