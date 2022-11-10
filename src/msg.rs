@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use byteorder::{ByteOrder, LittleEndian as Ble};
 use std::os::unix::net::UnixStream;
 
-const REMAIN_LOOKUP: [usize; 4] = [4, 5, 16, 0];
+const REMAIN_LOOKUP: [usize; 5] = [4, 5, 16, 0, 1];
 
 #[derive(Debug)]
 pub enum VkotMsg {
@@ -11,6 +11,7 @@ pub enum VkotMsg {
 	Loc(u8, i32), // 0-4: x_abs, y_abs, x_rel, y_rel
 	SetColor([f32; 4]),
 	Clear,
+	TextMode(bool),
 
 	// server -> client
 	Getch(u32),
@@ -78,6 +79,11 @@ impl VkotMsg {
 				}
 				3 => {
 					Self::Clear
+				}
+				4 => {
+					let b = buf[*offset];
+					*offset += 1;
+					Self::TextMode(b == 1)
 				}
 				c => return Err(anyhow!("unknown message type {:?}", c as char))
 			};

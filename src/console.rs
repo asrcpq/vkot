@@ -1,10 +1,12 @@
 use crate::msg::VkotMsg;
+use triangles::bmtext::wide_test;
 
 pub struct Console {
 	size: [u32; 2],
 	buffer: Vec<Vec<Cell>>, // row first
 	current_color: [f32; 4],
 	cpos: [i32; 2],
+	text_mode: bool,
 }
 
 #[derive(Clone)]
@@ -36,6 +38,7 @@ impl Console {
 			buffer: Vec::new(),
 			current_color: [0.0; 4],
 			cpos: [0, 0],
+			text_mode: true,
 		};
 		result.clear();
 		result
@@ -76,20 +79,32 @@ impl Console {
 		}
 	}
 
+	pub fn move_cursor(&mut self, ty: u8, pos: i32) {
+		match ty {
+			0 => self.cpos[0] = pos,
+			1 => self.cpos[1] = pos,
+			2 => self.cpos[0] += pos,
+			3 => self.cpos[1] += pos,
+			_ => panic!(),
+		}
+		self.limit_cpos();
+	}
+
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
 		match msg {
 			VkotMsg::Print(ch) => {
 				self.putchar(ch);
+				if self.text_mode {
+					if wide_test(ch) {
+						// TODO: wrap
+						self.move_cursor(2, 2);
+					} else {
+						self.move_cursor(2, 1);
+					}
+				}
 			}
 			VkotMsg::Loc(ty, pos) => {
-				match ty {
-					0 => self.cpos[0] = pos,
-					1 => self.cpos[1] = pos,
-					2 => self.cpos[0] += pos,
-					3 => self.cpos[1] += pos,
-					_ => panic!(),
-				}
-				self.limit_cpos();
+				self.move_cursor(ty, pos);
 			}
 			VkotMsg::SetColor(color) => {
 				self.current_color = color;
@@ -97,6 +112,9 @@ impl Console {
 			VkotMsg::Clear => {
 				eprintln!("cls");
 				self.clear();
+			}
+			VkotMsg::TextMode(on) => {
+				self.text_mode = on;
 			}
 			_ => panic!(),
 		}

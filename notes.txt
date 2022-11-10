@@ -1,1 +1,1 @@
-upgrade lib triangles to handle unicodes(buggy)
+solve unicode width, add text mode
