@@ -1,4 +1,3 @@
-// mod color_table;
 mod console;
 mod msg;
 
@@ -12,6 +11,7 @@ use msg::VkotMsg;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::model::cmodel::{Face, Model};
+use triangles::teximg::Teximg;
 
 type Swriter = BufWriter<UnixStream>;
 
@@ -79,6 +79,7 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 			let mut offset = 0;
 			let msgs = VkotMsg::from_buf(&bufv, &mut offset).unwrap();
 			bufv.drain(..offset);
+			eprintln!("remain {}: {:?}", bufv.len(), bufv);
 			for msg in msgs.into_iter() {
 				proxy.send_event(msg).unwrap();
 			}
@@ -93,9 +94,8 @@ fn main() {
 
 	let mut rdr = Renderer::new(&el);
 	let ssize = rdr.get_size();
-	let mut fc = FontConfig::default();
-	fc.resize_screen(ssize);
-	let img = fc.bitw_loader("../bitw/data/lat15_terminus32x16.txt");
+	let img = Teximg::load("../fontdata/v1/unifont1.png");
+	let mut fc = FontConfig::new(ssize, img.dim, [16, 16]);
 	rdr.upload_tex(img, 0);
 	let mut model = fc.generate_model();
 	let mut _tmhandle = None; // text model

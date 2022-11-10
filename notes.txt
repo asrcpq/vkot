@@ -1,4 +1,1 @@
-continuous read
-
-todo:
-unicode
+upgrade lib triangles to handle unicodes(buggy)

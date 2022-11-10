@@ -41,16 +41,22 @@ impl VkotMsg {
 				continue
 			}
 			let b0 = b0 - 128;
-			*offset += 1;
-			let remain = buflen - *offset;
+			let remain = buflen - *offset - 1; // always positive
 			if remain < REMAIN_LOOKUP[b0 as usize] {
 				break
 			}
+			*offset += 1;
 			let msg = match b0 {
 				0 => {
 					let ch = Ble::read_u32(&buf[*offset..*offset + 4]);
-					let ch = char::from_u32(ch).unwrap();
 					*offset += 4;
+					let ch = match char::from_u32(ch) {
+						Some(ch) => ch,
+						None => {
+							eprintln!("ERROR: ignore invalid char {}", ch);
+							continue
+						}
+					};
 					Self::Print(ch)
 				}
 				1 => {
