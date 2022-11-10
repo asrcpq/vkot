@@ -79,7 +79,6 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 			let mut offset = 0;
 			let msgs = VkotMsg::from_buf(&bufv, &mut offset).unwrap();
 			bufv.drain(..offset);
-			eprintln!("remain {}: {:?}", bufv.len(), bufv);
 			for msg in msgs.into_iter() {
 				proxy.send_event(msg).unwrap();
 			}
