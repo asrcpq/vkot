@@ -1,1 +1,1 @@
-solve unicode width, add text mode
+simplify

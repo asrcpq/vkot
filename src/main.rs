@@ -94,7 +94,7 @@ fn main() {
 	let mut rdr = Renderer::new(&el);
 	let ssize = rdr.get_size();
 	let img = Teximg::load("../fontdata/v1/unifont1.png");
-	let mut fc = FontConfig::new(ssize, img.dim, [16, 16]);
+	let mut fc = FontConfig::new(ssize, img.dim, [16, 16]).with_scaler(2);
 	rdr.upload_tex(img, 0);
 	let mut model = fc.generate_model();
 	let mut _tmhandle = None; // text model
