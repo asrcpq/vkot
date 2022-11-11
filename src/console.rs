@@ -85,8 +85,8 @@ impl Console {
 			VkotMsg::Blit(mut region, data) => {
 				if region[0] < 0 { region[0] = 0 }
 				if region[1] < 0 { region[0] = 0 }
-				if region[2] >= self.size[0] { region[2] = self.size[0] - 1 }
-				if region[3] >= self.size[1] { region[3] = self.size[1] - 1 }
+				if region[2] > self.size[0] { region[2] = self.size[0] }
+				if region[3] > self.size[1] { region[3] = self.size[1] }
 				if region[2] <= region[0] || region[3] <= region[1] {
 					return
 				}
