@@ -57,7 +57,7 @@ fn sender_handler(rx: Receiver<VkotMsg>) {
 fn client_handler(proxy: Elp) {
 	let _ = std::fs::remove_file("./vkot.socket");
 	let listener = UnixListener::bind("./vkot.socket").unwrap();
-	let mut buf = [0u8; 1024];
+	let mut buf = [0u8; 32768];
 	let mut bufv = Vec::new();
 	for stream in listener.incoming() {
 		let mut stream = match stream {
@@ -105,7 +105,9 @@ fn main() {
 	let [fsx, fsy] = fc.get_scaled_font_size();
 	let [fsx, fsy] = [fsx as i16, fsy as i16];
 	let (tx, rx) = channel();
-	let mut console = console::Console::new(tsize);
+	let mut console = console::Console::new(
+		[tsize[0] as i16, tsize[1] as i16]
+	);
 
 	let _ = std::thread::spawn(|| client_handler(proxy));
 	let _ = std::thread::spawn(|| sender_handler(rx));
@@ -122,9 +124,10 @@ fn main() {
 					fc.resize_screen(ssize);
 					model = fc.generate_model();
 					let tsize = fc.get_terminal_size_in_char();
+					let tsize = [tsize[0] as i16, tsize[1] as i16];
 					console.resize(tsize);
 					rdr.redraw();
-					tx.send(VkotMsg::Resized(ssize)).unwrap();
+					tx.send(VkotMsg::Resized(tsize)).unwrap();
 				}
 				WindowEvent::ReceivedCharacter(ch) => {
 					tx.send(VkotMsg::Getch(ch as u32)).unwrap();
@@ -188,8 +191,8 @@ fn main() {
 			match msg {
 				VkotMsg::Stream(_) => {
 					tx.send(msg).unwrap();
-					let ssize = rdr.get_size();
-					tx.send(VkotMsg::Resized(ssize)).unwrap();
+					let tsize = console.get_size();
+					tx.send(VkotMsg::Resized(tsize)).unwrap();
 				}
 				_ => {
 					console.handle_msg(msg);

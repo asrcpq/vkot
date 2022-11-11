@@ -1,7 +1,7 @@
 use crate::msg::VkotMsg;
 
 pub struct Console {
-	size: [u32; 2],
+	size: [i16; 2],
 	buffer: Vec<Vec<Cell>>, // row first
 	cpos: [i16; 2],
 }
@@ -34,7 +34,7 @@ impl Console {
 		];
 	}
 
-	pub fn new(size: [u32; 2]) -> Self {
+	pub fn new(size: [i16; 2]) -> Self {
 		let mut result = Self {
 			size,
 			buffer: Vec::new(),
@@ -44,7 +44,7 @@ impl Console {
 		result
 	}
 
-	pub fn resize(&mut self, size: [u32; 2]) {
+	pub fn resize(&mut self, size: [i16; 2]) {
 		// eprintln!("resize to {:?}", size);
 		if size[1] > self.size[1] {
 			self.buffer.extend(vec![vec![]; (size[1] - self.size[1]) as usize]);
@@ -58,7 +58,7 @@ impl Console {
 	}
 
 	fn putchar(&mut self, [px, py]: [i16; 2], ch: u32, color: u32) {
-		self.buffer[px as usize][py as usize] = Cell {
+		self.buffer[py as usize][px as usize] = Cell {
 			ch: char::from_u32(ch).unwrap(),
 			color: color_from_u32(color),
 		}
@@ -66,10 +66,17 @@ impl Console {
 
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
 		match msg {
-			VkotMsg::Blit(region, data) => {
+			VkotMsg::Blit(mut region, data) => {
+				if region[0] < 0 { region[0] = 0 }
+				if region[1] < 0 { region[0] = 0 }
+				if region[2] >= self.size[0] { region[2] = self.size[0] - 1 }
+				if region[3] >= self.size[1] { region[3] = self.size[1] - 1 }
+				if region[2] <= region[0] || region[3] <= region[1] {
+					return
+				}
 				let mut idx = 0;
-				for px in region[0]..region[1] {
-					for py in region[2]..region[3] {
+				for py in region[1]..region[3] {
+					for px in region[0]..region[2] {
 						let (ch, color) = data[idx];
 						self.putchar([px, py], ch, color);
 						idx += 1;
@@ -92,5 +99,9 @@ impl Console {
 
 	pub fn get_cpos(&self) -> [i16; 2] {
 		self.cpos
+	}
+
+	pub fn get_size(&self) -> [i16; 2] {
+		self.size
 	}
 }

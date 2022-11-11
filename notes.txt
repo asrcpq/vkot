@@ -1,1 +1,1 @@
-send resize event at start of communication
+all cursor to i16
