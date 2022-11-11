@@ -1,1 +1,1 @@
-refactoring, move buffer handling to client side
+send resize event at start of communication

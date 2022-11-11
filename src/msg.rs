@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::convert::TryInto;
 use std::os::unix::net::UnixStream;
 

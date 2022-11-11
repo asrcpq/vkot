@@ -3,7 +3,7 @@ mod msg;
 
 use std::io::{Read, Write, BufWriter};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 
@@ -14,16 +14,17 @@ use triangles::model::cmodel::{Face, Model};
 use triangles::teximg::Teximg;
 
 type Swriter = BufWriter<UnixStream>;
+type Elp = EventLoopProxy<VkotMsg>;
 
 fn sender_handler2(sw: &mut Swriter, msg: VkotMsg) -> std::io::Result<()> {
 	match msg {
 		VkotMsg::Getch(ch) => {
-			let _ = sw.write(&[b'g'])?;
+			let _ = sw.write(&[0])?;
 			let _ = sw.write(&ch.to_le_bytes())?;
 			sw.flush()?;
 		},
 		VkotMsg::Resized([tx, ty]) => {
-			let _ = sw.write(&[b'r'])?;
+			let _ = sw.write(&[1])?;
 			let _ = sw.write(&tx.to_le_bytes())?;
 			let _ = sw.write(&ty.to_le_bytes())?;
 			sw.flush()?;
@@ -53,7 +54,7 @@ fn sender_handler(rx: Receiver<VkotMsg>) {
 	}
 }
 
-fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
+fn client_handler(proxy: Elp) {
 	let _ = std::fs::remove_file("./vkot.socket");
 	let listener = UnixListener::bind("./vkot.socket").unwrap();
 	let mut buf = [0u8; 1024];
@@ -68,7 +69,7 @@ fn client_handler(proxy: EventLoopProxy<VkotMsg>, tx: Sender<VkotMsg>) {
 		};
 		let stream2 = stream.try_clone().unwrap();
 		eprintln!("client: update stream");
-		tx.send(VkotMsg::Stream(stream2)).unwrap();
+		proxy.send_event(VkotMsg::Stream(stream2)).unwrap();
 		loop {
 			let len = match stream.read(&mut buf) {
 				Ok(s) => s,
@@ -106,8 +107,7 @@ fn main() {
 	let (tx, rx) = channel();
 	let mut console = console::Console::new(tsize);
 
-	let tx2 = tx.clone();
-	let _ = std::thread::spawn(|| client_handler(proxy, tx2));
+	let _ = std::thread::spawn(|| client_handler(proxy));
 	let _ = std::thread::spawn(|| sender_handler(rx));
 
 	el.run(move |event, _, ctrl| match event {
@@ -185,8 +185,17 @@ fn main() {
 			rdr.render2();
 		}
 		Event::UserEvent(msg) => {
-			console.handle_msg(msg);
-			rdr.redraw();
+			match msg {
+				VkotMsg::Stream(_) => {
+					tx.send(msg).unwrap();
+					let ssize = rdr.get_size();
+					tx.send(VkotMsg::Resized(ssize)).unwrap();
+				}
+				_ => {
+					console.handle_msg(msg);
+					rdr.redraw();
+				}
+			}
 		}
 		Event::MainEventsCleared => {
 			rdr.redraw();
