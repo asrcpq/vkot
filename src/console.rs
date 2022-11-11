@@ -57,7 +57,23 @@ impl Console {
 		self.size = size;
 	}
 
+	fn pos_test(&self, [px, py]: [i16; 2]) -> bool {
+		if px < 0 || py < 0 {
+			return false
+		}
+		if px >= self.size[0] {
+			return false
+		}
+		if py >= self.size[1] {
+			return false
+		}
+		true
+	}
+
 	fn putchar(&mut self, [px, py]: [i16; 2], ch: u32, color: u32) {
+		if !self.pos_test([px, py]) {
+			return
+		}
 		self.buffer[py as usize][px as usize] = Cell {
 			ch: char::from_u32(ch).unwrap(),
 			color: color_from_u32(color),

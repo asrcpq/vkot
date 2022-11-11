@@ -38,6 +38,7 @@ impl VkotMsg {
 		let mut result = Vec::new();
 		let buflen = buf.len();
 		loop {
+			if *offset >= buflen { return Ok(result) }
 			let b0 = buf[*offset];
 			let mut region = [0i16; 4];
 			let mut blit_len = 0;
@@ -56,14 +57,14 @@ impl VkotMsg {
 				}
 				_ => return Err(anyhow!("ERROR: bad msg {}", b0)),
 			};
-			if *offset + test_len >= buflen {
+			if *offset + test_len > buflen {
+				eprintln!("{} {}/{}", offset, *offset + test_len, buflen);
 				return Ok(result);
 			}
 			*offset += 1;
 
 			let msg = match b0 {
 				1 => {
-					eprintln!("msg put");
 					let cx = read_i16(&buf[*offset..*offset + 2]);
 					let cy = read_i16(&buf[*offset + 2..*offset + 4]);
 					let cu = read_u32(&buf[*offset + 4..*offset + 8]);
@@ -72,14 +73,12 @@ impl VkotMsg {
 					VkotMsg::Put([cx, cy], (cu, cc))
 				}
 				2 => {
-					eprintln!("msg cursor");
 					let cx = read_i16(&buf[*offset..*offset + 2]);
 					let cy = read_i16(&buf[*offset + 2..*offset + 4]);
 					*offset += 4;
 					VkotMsg::Cursor([cx, cy])
 				}
 				0 => {
-					eprintln!("msg blit {}", blit_len);
 					*offset += 8;
 					let v = (0..blit_len).map(|idx| {
 						let cu = read_u32(&buf[*offset + idx * 8..*offset + idx * 8 + 4]);
