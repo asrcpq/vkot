@@ -22,7 +22,7 @@ impl Default for Cell {
 }
 
 fn color_from_u32(uc: u32) -> [f32; 4] {
-	let bs = uc.to_le_bytes();
+	let bs = uc.to_be_bytes();
 	core::array::from_fn(|idx| bs[idx] as f32 / 255.0)
 }
 
