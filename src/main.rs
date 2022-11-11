@@ -1,5 +1,6 @@
 mod console;
 mod msg;
+mod cursor;
 
 use std::io::{Read, Write, BufWriter};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -10,7 +11,6 @@ use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 use msg::VkotMsg;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
-use triangles::model::cmodel::{Face, Model};
 use triangles::teximg::Teximg;
 
 type Swriter = BufWriter<UnixStream>;
@@ -153,35 +153,11 @@ fn main() {
 			modelref.set_z(1);
 			_tmhandle = Some(modelref);
 
-			// draw cursor
-			let x = (cpos[0] * fsx) as f32;
+			let x1 = (cpos[0] * fsx) as f32;
+			let x2 = (cpos[0] * fsx) as f32;
 			let y1 = (cpos[1] * fsy) as f32;
 			let y2 = ((cpos[1] + 1) * fsy) as f32;
-			let vs = vec![
-				[x, y1, 0.0, 1.0],
-				[x, y2, 0.0, 1.0],
-				[x + 1.0, y1, 0.0, 1.0],
-				[x + 1.0, y2, 0.0, 1.0],
-			];
-			let faces = vec![
-				Face {
-					vid: [0, 1, 2],
-					color: [1.0; 4],
-					uvid: [0; 3],
-					layer: -1,
-				},
-				Face {
-					vid: [3, 1, 2],
-					color: [1.0; 4],
-					uvid: [0; 3],
-					layer: -1,
-				},
-			];
-			let model = Model {
-				vs,
-				uvs: Vec::new(),
-				faces,
-			};
+			let model = cursor::draw1([x1, y1, x2, y2], ssize);
 			let modelref = rdr.insert_model(&model);
 			_cmhandle = Some(modelref);
 

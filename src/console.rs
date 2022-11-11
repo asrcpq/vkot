@@ -6,7 +6,7 @@ pub struct Console {
 	cpos: [i16; 2],
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Cell {
 	pub ch: char,
 	pub color: [f32; 4],
@@ -77,7 +77,7 @@ impl Console {
 		self.buffer[py as usize][px as usize] = Cell {
 			ch: char::from_u32(ch).unwrap(),
 			color: color_from_u32(color),
-		}
+		};
 	}
 
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
