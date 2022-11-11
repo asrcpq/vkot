@@ -93,9 +93,12 @@ fn main() {
 	let proxy = el.create_proxy();
 
 	let mut rdr = Renderer::new(&el);
-	let ssize = rdr.get_size();
-	let img = Teximg::load("../fontdata/v1/unifont1.png");
-	let mut fc = FontConfig::new(ssize, img.dim, [16, 16]).with_scaler(2);
+	let (mut fc, img) = {
+		let ssize = rdr.get_size();
+		let img = Teximg::load("../fontdata/v1/unifont2_terminus.png");
+		let fc = FontConfig::new(ssize, img.dim, [16, 16]).with_scaler(2);
+		(fc, img)
+	};
 	rdr.upload_tex(img, 0);
 	let mut model = fc.generate_model();
 	let mut _tmhandle = None; // text model
@@ -157,6 +160,7 @@ fn main() {
 			let x2 = (cpos[0] * fsx) as f32;
 			let y1 = (cpos[1] * fsy) as f32;
 			let y2 = ((cpos[1] + 1) * fsy) as f32;
+			let ssize = rdr.get_size();
 			let model = cursor::draw1([x1, y1, x2, y2], ssize);
 			let modelref = rdr.insert_model(&model);
 			_cmhandle = Some(modelref);
