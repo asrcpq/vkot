@@ -1,1 +1,1 @@
-vkot now call ansi client(apaterm) and launch a shell
+split integrated terminal(vapa) as an independent binary file
