@@ -19,6 +19,7 @@ pub enum VkotMsg {
 
 	// server -> client
 	Getch(u32),
+	Skey([u8; 2]),
 	Resized([i16; 2]),
 
 	// server internal

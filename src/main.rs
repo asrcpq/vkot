@@ -7,8 +7,11 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{channel, Receiver};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
+use winit::event::{KeyboardInput, ElementState};
 
 use msg::VkotMsg;
+use skey::Skey;
+use skey::winit::WinitConversion;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::teximg::Teximg;
@@ -131,6 +134,19 @@ fn main() {
 					console.resize(tsize);
 					rdr.redraw();
 					tx.send(VkotMsg::Resized(tsize)).unwrap();
+				}
+				WindowEvent::KeyboardInput {
+					input: KeyboardInput {
+						state: ElementState::Pressed,
+						virtual_keycode: Some(vkc),
+						..
+					},
+					..
+				} => {
+					if let Some(k) = Skey::from_wk(vkc) {
+						let bytes = k.ser();
+						tx.send(VkotMsg::Skey(bytes)).unwrap();
+					}
 				}
 				WindowEvent::ReceivedCharacter(ch) => {
 					tx.send(VkotMsg::Getch(ch as u32)).unwrap();
