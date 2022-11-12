@@ -8,7 +8,8 @@ use crate::cursor;
 use crate::msg::VkotMsg;
 use crate::console::Console;
 use skey::Skey;
-use skey::winit::WinitConversion;
+use skey::winit::{WinitConversion, WinitModifier};
+use skey::modtrack::ModifierTracker;
 use triangles::renderer::Renderer;
 use triangles::bmtext::FontConfig;
 use triangles::teximg::Teximg;
@@ -91,7 +92,6 @@ fn client_handler(listener: UnixListener, proxy: Elp) {
 			bufv.drain(..offset);
 			for msg in msgs.into_iter() {
 				proxy.send_event(msg).unwrap();
-				// std::thread::sleep(std::time::Duration::from_millis(10));
 			}
 		}
 		eprintln!("client: break");
@@ -150,7 +150,7 @@ impl Vkot {
 		let _ = std::thread::spawn(move || client_handler(listener, elp));
 		let _ = std::thread::spawn(move || sender_handler(rx));
 	
-		let mut modtrack = skey::winit::ModifierTracker::default();
+		let mut modtrack = ModifierTracker::default();
 		self.el
 			.take()
 			.unwrap()
