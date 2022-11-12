@@ -89,6 +89,7 @@ fn client_handler(proxy: Elp) {
 			let msgs = VkotMsg::from_buf(&bufv, &mut offset).unwrap();
 			bufv.drain(..offset);
 			for msg in msgs.into_iter() {
+				std::thread::sleep(std::time::Duration::from_millis(5));
 				proxy.send_event(msg).unwrap();
 			}
 		}

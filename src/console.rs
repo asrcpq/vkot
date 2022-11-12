@@ -74,28 +74,51 @@ impl Console {
 		if !self.pos_test([px, py]) {
 			return
 		}
+		let ch = if let Some(ch) = char::from_u32(ch) {
+			ch
+		} else {
+			eprintln!("bad ch: {}", ch);
+			return
+		};
 		self.buffer[py as usize][px as usize] = Cell {
-			ch: char::from_u32(ch).unwrap(),
+			ch,
 			color: color_from_u32(color),
 		};
+	}
+
+	fn fit_region(&mut self, region: &mut [i16; 4]) -> bool {
+		if region[0] < 0 { region[0] = 0 }
+		if region[1] < 0 { region[0] = 0 }
+		if region[2] > self.size[0] { region[2] = self.size[0] }
+		if region[3] > self.size[1] { region[3] = self.size[1] }
+		if region[2] <= region[0] || region[3] <= region[1] {
+			return false
+		}
+		true
 	}
 
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
 		match msg {
 			VkotMsg::Blit(mut region, data) => {
-				if region[0] < 0 { region[0] = 0 }
-				if region[1] < 0 { region[0] = 0 }
-				if region[2] > self.size[0] { region[2] = self.size[0] }
-				if region[3] > self.size[1] { region[3] = self.size[1] }
-				if region[2] <= region[0] || region[3] <= region[1] {
+				let mut idx = 0;
+				if !self.fit_region(&mut region) {
 					return
 				}
-				let mut idx = 0;
 				for py in region[1]..region[3] {
 					for px in region[0]..region[2] {
 						let (ch, color) = data[idx];
 						self.putchar([px, py], ch, color);
 						idx += 1;
+					}
+				}
+			},
+			VkotMsg::Fill(mut region, (ch, color)) => {
+				if !self.fit_region(&mut region) {
+					return
+				}
+				for py in region[1]..region[3] {
+					for px in region[0]..region[2] {
+						self.putchar([px, py], ch, color);
 					}
 				}
 			},

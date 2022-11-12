@@ -16,6 +16,7 @@ pub enum VkotMsg {
 	Blit([i16; 4], Vec<(u32, u32)>), // LTRD
 	Put([i16; 2], (u32, u32)),
 	Cursor([i16; 2]),
+	Fill([i16; 4], (u32, u32)),
 
 	// server -> client
 	Getch(u32),
@@ -47,20 +48,24 @@ impl VkotMsg {
 			let test_len = match b0 {
 				1 => 1 + 4 + 8,
 				2 => 1 + 4,
-				0 => {
+				0 | 3 => {
 					if *offset + 9 >= buflen {
 						return Ok(result)
 					}
 					for idx in 0..4 {
 						region[idx] = read_i16(&buf[*offset + idx * 2 + 1..*offset + idx * 2 + 3]);
 					}
-					blit_len = ((region[2] - region[0]) * (region[3] - region[1])) as usize;
-					1 + 8 + blit_len * 8
+					if b0 == 0 {
+						blit_len = ((region[2] - region[0]) * (region[3] - region[1])) as usize;
+						1 + 8 + blit_len * 8
+					} else {
+						1 + 8 + 8
+					}
 				}
 				_ => return Err(anyhow!("ERROR: bad msg {}", b0)),
 			};
 			if *offset + test_len > buflen {
-				eprintln!("{} {}/{}", offset, *offset + test_len, buflen);
+				// eprintln!("{} {}/{}", offset, *offset + test_len, buflen);
 				return Ok(result);
 			}
 			*offset += 1;
@@ -89,6 +94,13 @@ impl VkotMsg {
 					}).collect::<Vec<_>>();
 					*offset += blit_len * 8;
 					VkotMsg::Blit(region, v)
+				}
+				3 => {
+					*offset += 8;
+					let cu = read_u32(&buf[*offset..*offset + 4]);
+					let cc = read_u32(&buf[*offset + 4..*offset + 8]);
+					*offset += 8;
+					VkotMsg::Fill(region, (cu, cc))
 				}
 				_ => panic!(),
 			};
