@@ -7,7 +7,6 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::{channel, Receiver};
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
-use winit::event::{KeyboardInput, ElementState};
 
 use msg::VkotMsg;
 use skey::Skey;
@@ -129,6 +128,7 @@ fn main() {
 
 	let _ = std::thread::spawn(|| client_handler(proxy));
 	let _ = std::thread::spawn(|| sender_handler(rx));
+	let mut modtrack = skey::winit::ModifierTracker::default();
 
 	el.run(move |event, _, ctrl| match event {
 		Event::WindowEvent { event: e, .. } => {
@@ -147,15 +147,18 @@ fn main() {
 					rdr.redraw();
 					tx.send(VkotMsg::Resized(tsize)).unwrap();
 				}
+				WindowEvent::ModifiersChanged(modifiers) => {
+					let ks = modtrack.update_state(modifiers);
+					for k in ks.into_iter() {
+						let bytes = k.ser();
+						tx.send(VkotMsg::Skey(bytes)).unwrap();
+					}
+				}
 				WindowEvent::KeyboardInput {
-					input: KeyboardInput {
-						state: ElementState::Pressed,
-						virtual_keycode: Some(vkc),
-						..
-					},
+					input,
 					..
 				} => {
-					if let Some(k) = Skey::from_wk(vkc) {
+					if let Some(k) = Skey::from_wki(input) {
 						let bytes = k.ser();
 						tx.send(VkotMsg::Skey(bytes)).unwrap();
 					}
