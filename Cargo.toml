@@ -9,4 +9,5 @@ winit = "0.27"
 anyhow = "1"
 
 triangles = {path = "../triangles"}
+vkot_client = {path = "../vkot_client"}
 skey = {path = "../skey", features = ["winit_key"]}

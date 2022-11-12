@@ -25,6 +25,7 @@ pub enum VkotMsg {
 
 	// server internal
 	Stream(UnixStream),
+	ChildExit,
 }
 
 impl VkotMsg {

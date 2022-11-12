@@ -61,9 +61,7 @@ fn sender_handler(rx: Receiver<VkotMsg>) {
 	}
 }
 
-fn client_handler(proxy: Elp) {
-	let _ = std::fs::remove_file("./vkot.socket");
-	let listener = UnixListener::bind("./vkot.socket").unwrap();
+fn client_handler(listener: UnixListener, proxy: Elp) {
 	let mut buf = [0u8; 32768];
 	let mut bufv = Vec::new();
 	for stream in listener.incoming() {
@@ -102,9 +100,21 @@ fn client_handler(proxy: Elp) {
 	}
 }
 
+fn child_handler(proxy: Elp) {
+	let (tx, rx) = channel();
+	let shell = std::env::var("SHELL").unwrap();
+	let _ = std::thread::spawn(|| vkot_client::apaterm::start(
+		tx,
+		vec![std::ffi::CString::new(shell).unwrap()],
+	));
+	let _ = rx.recv().unwrap();
+	proxy.send_event(VkotMsg::ChildExit).unwrap();
+}
+
 fn main() {
 	let el = EventLoopBuilder::<VkotMsg>::with_user_event().build();
 	let proxy = el.create_proxy();
+	let proxy2 = proxy.clone();
 
 	let mut rdr = Renderer::new(&el);
 	let (mut fc, img) = {
@@ -126,8 +136,13 @@ fn main() {
 		[tsize[0] as i16, tsize[1] as i16]
 	);
 
-	let _ = std::thread::spawn(|| client_handler(proxy));
-	let _ = std::thread::spawn(|| sender_handler(rx));
+	let socket_path = std::path::Path::new("./vkot.socket");
+	let _ = std::fs::remove_file(socket_path);
+	std::env::set_var("VKOT_SOCKET", socket_path);
+	let listener = UnixListener::bind(socket_path).unwrap();
+	let _ = std::thread::spawn(move || client_handler(listener, proxy));
+	let _ = std::thread::spawn(move || sender_handler(rx));
+	let _ = std::thread::spawn(move || child_handler(proxy2));
 	let mut modtrack = skey::winit::ModifierTracker::default();
 
 	el.run(move |event, _, ctrl| match event {
@@ -204,6 +219,9 @@ fn main() {
 					tx.send(msg).unwrap();
 					let tsize = console.get_size();
 					tx.send(VkotMsg::Resized(tsize)).unwrap();
+				}
+				VkotMsg::ChildExit => {
+					*ctrl = ControlFlow::Exit
 				}
 				_ => {
 					console.handle_msg(msg);
