@@ -32,6 +32,11 @@ fn sender_handler2(sw: &mut Swriter, msg: VkotMsg) -> std::io::Result<()> {
 			let _ = sw.write(&ty.to_le_bytes())?;
 			sw.flush()?;
 		},
+		VkotMsg::Skey(ch) => {
+			let _ = sw.write(&[2])?;
+			let _ = sw.write(&ch)?;
+			sw.flush()?;
+		},
 		_ => panic!()
 	}
 	Ok(())

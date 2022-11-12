@@ -30,6 +30,7 @@ impl VkotMsg {
 	pub fn is_s2c(&self) -> bool {
 		match self {
 			Self::Getch(_) => true,
+			Self::Skey(_) => true,
 			Self::Resized(_) => true,
 			_ => false,
 		}
