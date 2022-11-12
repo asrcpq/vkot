@@ -86,11 +86,17 @@ fn client_handler(proxy: Elp) {
 			if len == 0 { break }
 			bufv.extend(buf[..len].to_vec());
 			let mut offset = 0;
-			let msgs = VkotMsg::from_buf(&bufv, &mut offset).unwrap();
+			let msgs = match VkotMsg::from_buf(&bufv, &mut offset) {
+				Ok(msgs) => msgs,
+				Err(e) => {
+					eprintln!("{:?}", e);
+					Vec::new()
+				},
+			};
 			bufv.drain(..offset);
 			for msg in msgs.into_iter() {
-				std::thread::sleep(std::time::Duration::from_millis(5));
 				proxy.send_event(msg).unwrap();
+				// std::thread::sleep(std::time::Duration::from_millis(10));
 			}
 		}
 		eprintln!("client: break");
