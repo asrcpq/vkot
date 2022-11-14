@@ -118,7 +118,7 @@ impl Vkot {
 		let listener = UnixListener::bind(socket_path).unwrap();
 		let (fc, img) = {
 			let ssize = rdr.get_size();
-			let img = Teximg::load("../fontdata/v1/unifont2_terminus.png");
+			let img = Teximg::load("../fontdata/v1/unifont2_terminus.png", false);
 			let fc = FontConfig::new(ssize, img.dim, [16, 16]).with_scaler(2);
 			(fc, img)
 		};
