@@ -8,6 +8,7 @@ edition = "2018"
 winit = "0.27"
 anyhow = "1"
 
-triangles = {path = "../triangles"}
+ttri = {path = "../ttri"}
+ttri_mono = {path = "../ttri_mono"}
 vkot_client = {path = "../vkot_client"}
 skey = {path = "../skey", features = ["winit_key"]}

@@ -1,4 +1,4 @@
-use triangles::model::cmodel::{Face, Model};
+use ttri::model::cmodel::{Face, Model};
 
 // next char block: LURD
 #[allow(dead_code)]

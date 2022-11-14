@@ -10,9 +10,9 @@ use crate::console::Console;
 use skey::Skey;
 use skey::winit::{WinitConversion, WinitModifier};
 use skey::modtrack::ModifierTracker;
-use triangles::renderer::Renderer;
-use triangles::bmtext::FontConfig;
-use triangles::teximg::Teximg;
+use ttri::renderer::Renderer;
+use ttri::teximg::Teximg;
+use ttri_mono::bmtext::FontConfig;
 
 type Swriter = BufWriter<UnixStream>;
 pub type Elp = EventLoopProxy<VkotMsg>;
