@@ -1,6 +1,7 @@
 use crate::msg::VkotMsg;
 
 use vkot_common::cell::Cell;
+use vkot_common::region::Region;
 
 pub struct Console {
 	size: [i16; 2],
@@ -59,15 +60,9 @@ impl Console {
 		self.buffer[py as usize][px as usize] = cell;
 	}
 
-	fn fit_region(&mut self, region: &mut [i16; 4]) -> bool {
-		if region[0] < 0 { region[0] = 0 }
-		if region[1] < 0 { region[0] = 0 }
-		if region[2] > self.size[0] { region[2] = self.size[0] }
-		if region[3] > self.size[1] { region[3] = self.size[1] }
-		if region[2] <= region[0] || region[3] <= region[1] {
-			return false
-		}
-		true
+	fn fit_region(&self, region: &mut Region) -> bool {
+		*region = region.intersect(&Region::sizebox(self.size));
+		region.is_empty()
 	}
 
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
@@ -80,9 +75,10 @@ impl Console {
 			},
 			VkotMsg::Blit(mut region, cells) => {
 				let mut idx = 0;
-				if !self.fit_region(&mut region) {
+				if self.fit_region(&mut region) {
 					return
 				}
+				let region = region.data();
 				for py in region[1]..region[3] {
 					for px in region[0]..region[2] {
 						self.setchar_checked([px, py], cells[idx]);
@@ -91,9 +87,10 @@ impl Console {
 				}
 			},
 			VkotMsg::Fill(mut region, cell) => {
-				if !self.fit_region(&mut region) {
+				if self.fit_region(&mut region) {
 					return
 				}
+				let region = region.data();
 				for py in region[1]..region[3] {
 					for px in region[0]..region[2] {
 						self.setchar_checked([px, py], cell);

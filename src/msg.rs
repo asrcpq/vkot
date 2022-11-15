@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use std::os::unix::net::UnixStream;
 
 use vkot_common::cell::Cell;
+use vkot_common::region::Region;
 
 fn read_i16(bytes: &[u8]) -> i16 {
 	i16::from_le_bytes(bytes.try_into().unwrap())
@@ -13,8 +14,8 @@ pub enum VkotMsg {
 	// client -> server
 	Put([i16; 2], Cell),
 	Cursor([i16; 2]),
-	Blit([i16; 4], Vec<Cell>), // LTRD
-	Fill([i16; 4], Cell),
+	Blit(Region, Vec<Cell>), // LTRD
+	Fill(Region, Cell),
 
 	// server -> client
 	Getch(u32),
@@ -42,7 +43,7 @@ impl VkotMsg {
 		loop {
 			if *offset >= buflen { return Ok(result) }
 			let b0 = buf[*offset];
-			let mut region = [0i16; 4];
+			let mut region: Option<Region> = None;
 			let mut blit_len = 0;
 			let test_len = match b0 {
 				0 => 1 + 4,
@@ -51,11 +52,10 @@ impl VkotMsg {
 					if *offset + 9 >= buflen {
 						return Ok(result)
 					}
-					for idx in 0..4 {
-						region[idx] = read_i16(&buf[*offset + idx * 2 + 1..*offset + idx * 2 + 3]);
-					}
+					let r = Region::from_le_bytes(&buf[*offset + 1..]);
+					region = Some(r);
 					if b0 == 2 {
-						blit_len = ((region[2] - region[0]) * (region[3] - region[1])) as usize;
+						blit_len = r.len();
 						1 + 8 + blit_len * 16
 					} else {
 						1 + 8 + 16
@@ -91,13 +91,13 @@ impl VkotMsg {
 						cell
 					}).collect::<Vec<_>>();
 					*offset += blit_len * 16;
-					VkotMsg::Blit(region, v)
+					VkotMsg::Blit(region.unwrap(), v)
 				}
 				3 => {
 					*offset += 8;
 					let cell = Cell::from_le_bytes(&buf[*offset..]);
 					*offset += 16;
-					VkotMsg::Fill(region, cell)
+					VkotMsg::Fill(region.unwrap(), cell)
 				}
 				_ => panic!(),
 			};
