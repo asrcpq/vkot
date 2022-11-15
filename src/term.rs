@@ -11,11 +11,17 @@ use skey::Skey;
 use skey::winit::{WinitConversion, WinitModifier};
 use skey::modtrack::ModifierTracker;
 use ttri::renderer::Renderer;
+use ttri::model::model_ref::ModelRef;
 use ttri::teximg::Teximg;
 use ttri_mono::bmtext::FontConfig;
 
 type Swriter = BufWriter<UnixStream>;
 pub type Elp = EventLoopProxy<VkotMsg>;
+
+fn uc(uc: u32) -> [f32; 4] {
+	let bs = uc.to_be_bytes();
+	core::array::from_fn(|idx| bs[idx] as f32 / 255.0)
+}
 
 fn sender_handler2(sw: &mut Swriter, msg: VkotMsg) -> std::io::Result<()> {
 	match msg {
@@ -82,6 +88,7 @@ fn client_handler(listener: UnixListener, proxy: Elp) {
 			if len == 0 { break }
 			bufv.extend(buf[..len].to_vec());
 			let mut offset = 0;
+			// TODO: avoid heap allocation of msgs, return an iterator
 			let msgs = match VkotMsg::from_buf(&bufv, &mut offset) {
 				Ok(msgs) => msgs,
 				Err(e) => {
@@ -104,6 +111,10 @@ pub struct Vkot {
 	listener: Option<UnixListener>,
 	rdr: Renderer,
 	fc: FontConfig,
+
+	text_model: Option<ModelRef>,
+	textbg_model: Option<ModelRef>,
+	cursor_model: Option<ModelRef>,
 }
 
 impl Vkot {
@@ -118,8 +129,10 @@ impl Vkot {
 		let listener = UnixListener::bind(socket_path).unwrap();
 		let (fc, img) = {
 			let ssize = rdr.get_size();
-			let img = Teximg::load("../fontdata/v1/unifont2_terminus.png", false);
-			let fc = FontConfig::new(ssize, img.dim, [16, 16]).with_scaler(2);
+			//let img = Teximg::load("../fontdata/v1/unifont2_terminus.png", false);
+			//let fc = FontConfig::new(ssize, img.dim, [16, 16]).with_scaler(2);
+			let img = Teximg::load("../fontdata/v1/unifont3_terminus_32.png", false);
+			let fc = FontConfig::new(ssize, img.dim, [32, 32]);
 			(fc, img)
 		};
 		rdr.upload_tex(img, 0);
@@ -129,13 +142,15 @@ impl Vkot {
 			listener: Some(listener),
 			rdr,
 			fc,
+
+			text_model: None,
+			textbg_model: None,
+			cursor_model: None,
 		}
 	}
 
 	pub fn run(mut self) {
-		let mut model = self.fc.generate_model();
-		let mut _tmhandle = None; // text model
-		let mut _cmhandle = None; // cursor model
+		let [mut model, mut bmodel] = self.fc.generate_models();
 	
 		let tsize = self.fc.get_terminal_size_in_char();
 		let [fsx, fsy] = self.fc.get_scaled_font_size();
@@ -165,7 +180,7 @@ impl Vkot {
 						self.rdr.damage();
 						let ssize = self.rdr.get_size();
 						self.fc.resize_screen(ssize);
-						model = self.fc.generate_model();
+						[model, bmodel] = self.fc.generate_models();
 						let tsize = self.fc.get_terminal_size_in_char();
 						let tsize = [tsize[0] as i16, tsize[1] as i16];
 						console.resize(tsize);
@@ -195,22 +210,36 @@ impl Vkot {
 				}
 			}
 			Event::RedrawRequested(_window_id) => {
-				let cells = console.get_buffer();
+				let buffer = console.get_buffer();
+				let tsize = console.get_size();
 				let cpos = console.get_cpos();
 				model.faces = Vec::new();
-				for (py, line) in cells.iter().enumerate() {
-					for (px, cell) in line.iter().enumerate() {
-						model.faces.extend(self.fc.text2fs(
+				bmodel.faces = Vec::new();
+				for py in 0..tsize[1] as usize {
+					for px in 0..tsize[0] as usize {
+						match self.fc.char(
 							[px as u32, py as u32],
-							std::iter::once(cell.ch),
-							cell.color,
+							buffer[py][px].ch,
+							uc(buffer[py][px].fg),
+							uc(buffer[py][px].bg),
 							0,
-						));
+						) {
+							Ok([face0, face1, face2, face3]) => {
+								model.faces.push(face0);
+								model.faces.push(face1);
+								bmodel.faces.push(face2);
+								bmodel.faces.push(face3);
+							}
+							Err(e) => eprintln!("ERROR {:?}", e),
+						}
 					}
 				}
 				let mut modelref = self.rdr.insert_model(&model);
+				modelref.set_z(2);
+				self.text_model= Some(modelref);
+				let mut modelref = self.rdr.insert_model(&bmodel);
 				modelref.set_z(1);
-				_tmhandle = Some(modelref);
+				self.textbg_model = Some(modelref);
 	
 				let x1 = (cpos[0] * fsx) as f32;
 				let x2 = (cpos[0] * fsx) as f32;
@@ -218,8 +247,9 @@ impl Vkot {
 				let y2 = ((cpos[1] + 1) * fsy) as f32;
 				let ssize = self.rdr.get_size();
 				let model = cursor::draw1([x1, y1, x2, y2], ssize);
-				let modelref = self.rdr.insert_model(&model);
-				_cmhandle = Some(modelref);
+				let mut modelref = self.rdr.insert_model(&model);
+				modelref.set_z(0);
+				self.cursor_model = Some(modelref);
 	
 				self.rdr.render2();
 			}

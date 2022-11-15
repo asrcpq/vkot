@@ -1,29 +1,11 @@
 use crate::msg::VkotMsg;
 
+use vkot_common::cell::Cell;
+
 pub struct Console {
 	size: [i16; 2],
 	buffer: Vec<Vec<Cell>>, // row first
 	cpos: [i16; 2],
-}
-
-#[derive(Clone, Debug)]
-pub struct Cell {
-	pub ch: char,
-	pub color: [f32; 4],
-}
-
-impl Default for Cell {
-	fn default() -> Self {
-		Self {
-			ch: ' ',
-			color: [1.0; 4],
-		}
-	}
-}
-
-fn color_from_u32(uc: u32) -> [f32; 4] {
-	let bs = uc.to_be_bytes();
-	core::array::from_fn(|idx| bs[idx] as f32 / 255.0)
 }
 
 impl Console {
@@ -70,20 +52,11 @@ impl Console {
 		true
 	}
 
-	fn putchar(&mut self, [px, py]: [i16; 2], ch: u32, color: u32) {
+	fn setchar_checked(&mut self, [px, py]: [i16; 2], cell: Cell) {
 		if !self.pos_test([px, py]) {
 			return
 		}
-		let ch = if let Some(ch) = char::from_u32(ch) {
-			ch
-		} else {
-			eprintln!("bad ch: {}", ch);
-			return
-		};
-		self.buffer[py as usize][px as usize] = Cell {
-			ch,
-			color: color_from_u32(color),
-		};
+		self.buffer[py as usize][px as usize] = cell;
 	}
 
 	fn fit_region(&mut self, region: &mut [i16; 4]) -> bool {
@@ -99,34 +72,33 @@ impl Console {
 
 	pub fn handle_msg(&mut self, msg: VkotMsg) {
 		match msg {
-			VkotMsg::Blit(mut region, data) => {
+			VkotMsg::Cursor(pos) => {
+				self.cpos = pos;
+			},
+			VkotMsg::Put(pos, cell) => {
+				self.setchar_checked(pos, cell);
+			},
+			VkotMsg::Blit(mut region, cells) => {
 				let mut idx = 0;
 				if !self.fit_region(&mut region) {
 					return
 				}
 				for py in region[1]..region[3] {
 					for px in region[0]..region[2] {
-						let (ch, color) = data[idx];
-						self.putchar([px, py], ch, color);
+						self.setchar_checked([px, py], cells[idx]);
 						idx += 1;
 					}
 				}
 			},
-			VkotMsg::Fill(mut region, (ch, color)) => {
+			VkotMsg::Fill(mut region, cell) => {
 				if !self.fit_region(&mut region) {
 					return
 				}
 				for py in region[1]..region[3] {
 					for px in region[0]..region[2] {
-						self.putchar([px, py], ch, color);
+						self.setchar_checked([px, py], cell);
 					}
 				}
-			},
-			VkotMsg::Cursor(pos) => {
-				self.cpos = pos;
-			},
-			VkotMsg::Put(pos, (ch, color)) => {
-				self.putchar(pos, ch, color);
 			},
 			_ => panic!(),
 		}
