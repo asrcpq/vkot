@@ -12,4 +12,4 @@ ttri = {path = "../ttri"}
 ttri_mono = {path = "../ttri_mono"}
 vkot_client = {path = "../vkot_client"}
 vkot_common = {path = "../vkot_common"}
-skey = {path = "../skey", features = ["winit_key"]}
+skey = {path = "../skey", features = ["winit"]}
