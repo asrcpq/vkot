@@ -251,7 +251,7 @@ impl Vkot {
 				modelref.set_z(0);
 				self.cursor_model = Some(modelref);
 	
-				self.rdr.render2();
+				self.rdr.render_s();
 			}
 			Event::UserEvent(msg) => {
 				match msg {
